@@ -27,3 +27,6 @@ firebase/functions/.env
 # --------------------
 .env
 .env.*
+
+# JetBrains IDEs
+.idea/

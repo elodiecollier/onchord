@@ -1,0 +1,201 @@
+/**
+ * Import function triggers from their respective submodules:
+ *
+ * import {onCall} from "firebase-functions/v2/https";
+ * import {onDocumentWritten} from "firebase-functions/v2/firestore";
+ *
+ * See a full list of supported triggers at https://firebase.google.com/docs/functions
+ */
+
+import {setGlobalOptions} from "firebase-functions/v2";
+import {onRequest} from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
+import * as admin from "firebase-admin";
+
+setGlobalOptions({maxInstances: 10, region: "us-east1"});
+
+admin.initializeApp();
+
+export const healthcheck = onRequest((req, res) => {
+  logger.info("healthcheck hit", {method: req.method, path: req.path});
+  res.status(200).json({ok: true, service: "onchord-backend"});
+});
+
+type SpotifyTokenResponse = {
+  access_token: string;
+  token_type: string;
+  scope?: string;
+  expires_in: number;
+  refresh_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+export const spotifyExchange = onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const authHeader = req.header("Authorization") || "";
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (!match) {
+      res.status(401).json({error: "Missing Authorization Bearer token"});
+      return;
+    }
+
+    const idToken = match[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const code = body["code"];
+    const codeVerifier = body["codeVerifier"];
+    const redirectUri = body["redirectUri"];
+
+    if (
+      typeof code !== "string" ||
+        typeof codeVerifier !== "string" ||
+        typeof redirectUri !== "string"
+    ) {
+      res.status(400).json({
+        error: "Missing or invalid code, codeVerifier, or redirectUri",
+      });
+      return;
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    if (!clientId) {
+      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID env var"});
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("client_id", clientId);
+    params.set("grant_type", "authorization_code");
+    params.set("code", code);
+    params.set("redirect_uri", redirectUri);
+    params.set("code_verifier", codeVerifier);
+
+    const tokenResp = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: params.toString(),
+    });
+
+    const tokenJson = (await tokenResp.json()) as SpotifyTokenResponse;
+
+    if (!tokenResp.ok) {
+      logger.error("Spotify token exchange failed", tokenJson);
+      res.status(tokenResp.status).json(tokenJson);
+      return;
+    }
+
+    const expiresAt = Date.now() + tokenJson.expires_in * 1000;
+
+    await admin
+      .firestore()
+      .collection("spotifyTokens")
+      .doc(uid)
+      .set(
+        {
+          refreshToken: tokenJson.refresh_token ?? null,
+          accessToken: tokenJson.access_token ?? null,
+          expiresAt,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        {merge: true}
+      );
+
+    res.status(200).json({
+      accessToken: tokenJson.access_token,
+      expiresIn: tokenJson.expires_in,
+      tokenType: tokenJson.token_type,
+      scope: tokenJson.scope,
+    });
+  } catch (error) {
+    logger.error("spotifyExchange error", error);
+    res.status(500).json({error: "Internal server error"});
+  }
+});
+
+export const spotifyRefresh = onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const authHeader = req.header("Authorization") || "";
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (!match) {
+      res.status(401).json({error: "Missing Authorization Bearer token"});
+      return;
+    }
+
+    const idToken = match[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      res.status(404).json({error: "No Spotify tokens found for user"});
+      return;
+    }
+
+    const data = docSnap.data() as { refreshToken?: string };
+    const refreshToken = data.refreshToken;
+    if (!refreshToken) {
+      res.status(400).json({error: "Missing refreshToken for user"});
+      return;
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    if (!clientId) {
+      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID env var"});
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.set("client_id", clientId);
+    params.set("grant_type", "refresh_token");
+    params.set("refresh_token", refreshToken);
+
+    const tokenResp = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: params.toString(),
+    });
+
+    const tokenJson = (await tokenResp.json()) as SpotifyTokenResponse;
+
+    if (!tokenResp.ok) {
+      logger.error("Spotify refresh failed", tokenJson);
+      res.status(tokenResp.status).json(tokenJson);
+      return;
+    }
+
+    const expiresAt = Date.now() + tokenJson.expires_in * 1000;
+
+    await docRef.set(
+      {
+        accessToken: tokenJson.access_token ?? null,
+        expiresAt,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      {merge: true}
+    );
+
+    res.status(200).json({
+      accessToken: tokenJson.access_token,
+      expiresIn: tokenJson.expires_in,
+      tokenType: tokenJson.token_type,
+      scope: tokenJson.scope,
+    });
+  } catch (error) {
+    logger.error("spotifyRefresh error", error);
+    res.status(500).json({error: "Internal server error"});
+  }
+});
