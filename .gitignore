@@ -1,0 +1,29 @@
+# --------------------
+# macOS
+# --------------------
+.DS_Store
+
+# --------------------
+# Xcode / iOS
+# --------------------
+DerivedData/
+*.xcworkspace
+xcuserdata/
+*.xcuserstate
+.build/
+
+# Swift Package Manager
+.swiftpm/
+
+# --------------------
+# Firebase / Node
+# --------------------
+firebase/functions/node_modules/
+firebase/.runtimeconfig.json
+firebase/functions/.env
+
+# --------------------
+# Environment / Secrets
+# --------------------
+.env
+.env.*
