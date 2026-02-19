@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 🔐 User profiles
+    match /users/{userId} {
+      // Anyone can read public profiles
+      allow read: if true;
+
+      // Only the user can write their own profile
+      allow write: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    // ⭐ Reviews (albums / tracks)
+    match /reviews/{reviewId} {
+      // Publicly readable (for feeds, profiles)
+      allow read: if true;
+
+      // Only authenticated users can create reviews for themselves
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid;
+
+      // Only the owner can update or delete their review
+      allow update, delete: if request.auth != null
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // 👥 Follow relationships
+    match /follows/{followId} {
+      allow read: if true;
+
+      // Only the follower can create the follow record
+      allow create: if request.auth != null
+        && request.resource.data.followerId == request.auth.uid;
+
+      // Only the follower can delete it
+      allow delete: if request.auth != null
+        && resource.data.followerId == request.auth.uid;
+    }
+
+    // 🔒 Spotify tokens (private, per-user)
+    match /spotifyTokens/{userId} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == userId;
+    }
+  }
+}
