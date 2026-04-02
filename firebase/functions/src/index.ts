@@ -410,6 +410,11 @@ export const spotifySearch = onRequest(async (req, res) => {
 
     const accessToken = refreshJson.access_token;
 
+    // Save rotated refresh token if Spotify issued a new one
+    if (refreshJson.refresh_token) {
+      await docRef.update({refreshToken: refreshJson.refresh_token});
+    }
+
     // Call Spotify search API
     const url = new URL("https://api.spotify.com/v1/search");
     url.searchParams.set("q", q);
