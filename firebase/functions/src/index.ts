@@ -444,3 +444,237 @@ export const spotifySearch = onRequest(async (req, res) => {
     res.status(500).json({error: "Internal server error"});
   }
 });
+
+export const spotifyAlbumTracks = onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const authHeader = req.header("Authorization") || "";
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (!match) {
+      res.status(401).json({error: "Missing Authorization Bearer token"});
+      return;
+    }
+
+    const idToken = match[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const albumId = body["albumId"];
+
+    if (typeof albumId !== "string" || albumId.trim().length === 0) {
+      res.status(400).json({error: "Missing albumId"});
+      return;
+    }
+
+    // Get refresh token from Firestore
+    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      res.status(404).json({error: "No Spotify tokens found"});
+      return;
+    }
+
+    const data = docSnap.data() as {refreshToken?: string};
+    const refreshToken = data.refreshToken;
+
+    if (!refreshToken) {
+      res.status(400).json({error: "Missing refreshToken"});
+      return;
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    if (!clientId) {
+      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID"});
+      return;
+    }
+
+    // Refresh access token
+    const refreshParams = new URLSearchParams();
+    refreshParams.set("client_id", clientId);
+    refreshParams.set("grant_type", "refresh_token");
+    refreshParams.set("refresh_token", refreshToken);
+
+    const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: refreshParams.toString(),
+    });
+
+    const refreshJson = await refreshResp.json();
+
+    if (!refreshResp.ok) {
+      res.status(refreshResp.status).json(refreshJson);
+      return;
+    }
+
+    const accessToken = refreshJson.access_token;
+
+    // Save rotated refresh token if Spotify issued a new one
+    if (refreshJson.refresh_token) {
+      try {
+        await docRef.update({refreshToken: refreshJson.refresh_token});
+      } catch (e) {
+        logger.warn("Failed to save rotated refresh token", e);
+      }
+    }
+
+    // Call Spotify album API
+    const albumResp = await fetch(
+      `https://api.spotify.com/v1/albums/${encodeURIComponent(albumId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const albumJson = await albumResp.json();
+
+    if (!albumResp.ok) {
+      res.status(albumResp.status).json(albumJson);
+      return;
+    }
+
+    res.status(200).json(albumJson);
+  } catch (error) {
+    logger.error("spotifyAlbumTracks error", error);
+    res.status(500).json({error: "Internal server error"});
+  }
+});
+
+export const spotifyArtistAlbums = onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const authHeader = req.header("Authorization") || "";
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (!match) {
+      res.status(401).json({error: "Missing Authorization Bearer token"});
+      return;
+    }
+
+    const idToken = match[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const artistId = body["artistId"];
+
+    if (typeof artistId !== "string" || artistId.trim().length === 0) {
+      res.status(400).json({error: "Missing artistId"});
+      return;
+    }
+
+    // Get refresh token from Firestore
+    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      res.status(404).json({error: "No Spotify tokens found"});
+      return;
+    }
+
+    const data = docSnap.data() as {refreshToken?: string};
+    const refreshToken = data.refreshToken;
+
+    if (!refreshToken) {
+      res.status(400).json({error: "Missing refreshToken"});
+      return;
+    }
+
+    const clientId = process.env.SPOTIFY_CLIENT_ID;
+    if (!clientId) {
+      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID"});
+      return;
+    }
+
+    // Refresh access token
+    const refreshParams = new URLSearchParams();
+    refreshParams.set("client_id", clientId);
+    refreshParams.set("grant_type", "refresh_token");
+    refreshParams.set("refresh_token", refreshToken);
+
+    const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: refreshParams.toString(),
+    });
+
+    const refreshJson = await refreshResp.json();
+
+    if (!refreshResp.ok) {
+      res.status(refreshResp.status).json(refreshJson);
+      return;
+    }
+
+    const accessToken = refreshJson.access_token;
+
+    // Save rotated refresh token if Spotify issued a new one
+    if (refreshJson.refresh_token) {
+      try {
+        await docRef.update({refreshToken: refreshJson.refresh_token});
+      } catch (e) {
+        logger.warn("Failed to save rotated refresh token", e);
+      }
+    }
+
+    // Fetch artist profile and albums in parallel
+    const albumsUrl = new URL(
+      `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}/albums`
+    );
+    albumsUrl.searchParams.set("include_groups", "album,single,compilation");
+
+    const [artistResp, albumsResp] = await Promise.all([
+      fetch(
+        `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`,
+        {headers: {Authorization: `Bearer ${accessToken}`}}
+      ),
+      fetch(albumsUrl.toString(), {
+        headers: {Authorization: `Bearer ${accessToken}`},
+      }),
+    ]);
+
+    const artistJson = await artistResp.json();
+    const albumsJson = await albumsResp.json();
+
+    if (!artistResp.ok) {
+      logger.error("Spotify artist fetch failed", {
+        status: artistResp.status,
+        body: artistJson,
+      });
+      res.status(artistResp.status).json({
+        source: "artist",
+        spotifyError: artistJson,
+      });
+      return;
+    }
+
+    if (!albumsResp.ok) {
+      logger.error("Spotify albums fetch failed", {
+        url: albumsUrl.toString(),
+        status: albumsResp.status,
+        body: albumsJson,
+      });
+      res.status(albumsResp.status).json({
+        source: "albums",
+        url: albumsUrl.toString(),
+        spotifyError: albumsJson,
+      });
+      return;
+    }
+
+    res.status(200).json({artist: artistJson, albums: albumsJson});
+  } catch (error) {
+    logger.error("spotifyArtistAlbums error", error);
+    res.status(500).json({error: "Internal server error"});
+  }
+});
