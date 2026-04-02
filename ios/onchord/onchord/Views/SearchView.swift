@@ -7,50 +7,53 @@
 
 import SwiftUI
 import FirebaseAuth
+import FirebaseFirestore
 
-struct ArtistResult: Identifiable {
-    let id: String
-    let name: String
-    let imageUrl: URL?
-}
-
-struct AlbumResult: Identifiable {
+struct TrackResult: Identifiable, Hashable {
     let id: String
     let name: String
     let artistName: String
-    let albumType: String // "album", "single", "compilation"
+    let albumName: String
     let imageUrl: URL?
+}
 
-    var typeLabel: String? {
-        switch albumType {
-        case "single": return "EP / Single"
-        case "compilation": return "Compilation"
-        default: return nil
+enum SearchItem: Identifiable {
+    case artist(id: String, name: String, imageUrl: URL?)
+    case album(id: String, name: String, artistName: String, albumType: String, imageUrl: URL?)
+    case track(TrackResult)
+
+    var id: String {
+        switch self {
+        case .artist(let id, _, _): return "artist-\(id)"
+        case .album(let id, _, _, _, _): return "album-\(id)"
+        case .track(let t): return "track-\(t.id)"
         }
     }
-}
 
-struct TrackResult: Identifiable {
-    let id: String
-    let name: String
-    let artistName: String
-    let imageUrl: URL?
-}
-
-struct SearchResults {
-    var artists: [ArtistResult] = []
-    var albums: [AlbumResult] = []
-    var tracks: [TrackResult] = []
-
-    var isEmpty: Bool { artists.isEmpty && albums.isEmpty && tracks.isEmpty }
+    var name: String {
+        switch self {
+        case .artist(_, let name, _): return name
+        case .album(_, let name, _, _, _): return name
+        case .track(let t): return t.name
+        }
+    }
 }
 
 struct SearchView: View {
     @EnvironmentObject private var authManager: AuthManager
     @State private var query = ""
-    @State private var results = SearchResults()
+    @State private var items: [SearchItem] = []
     @State private var status = ""
     @State private var hasSearched = false
+    @State private var searchTask: Task<Void, Never>?
+    @State private var searchHistory: [String] = []
+
+    private static let historyKey = "searchHistory"
+    private static let maxHistory = 20
+
+    private var showHistory: Bool {
+        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && items.isEmpty
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,19 +66,29 @@ struct SearchView: View {
                 .padding(.trailing)
             }
 
-            HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
                 TextField("Search music...", text: $query)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onSubmit {
-                        Task { await searchSpotify() }
+                    .textContentType(.none)
+                    .autocorrectionDisabled()
+                if !query.isEmpty {
+                    Button {
+                        query = ""
+                        items = []
+                        hasSearched = false
+                        status = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
                     }
-
-                Button("Search") {
-                    Task { await searchSpotify() }
                 }
-                .buttonStyle(.borderedProminent)
             }
-            .padding()
+            .padding(10)
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
 
             if !status.isEmpty {
                 Text(status)
@@ -84,76 +97,130 @@ struct SearchView: View {
                     .padding(.bottom, 4)
             }
 
-            if hasSearched && results.isEmpty {
+            if showHistory && !searchHistory.isEmpty {
+                List {
+                    Section {
+                        ForEach(searchHistory, id: \.self) { term in
+                            Button {
+                                query = term
+                                triggerSearch(for: term)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .foregroundColor(.secondary)
+                                    Text(term)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                            }
+                        }
+                    } header: {
+                        HStack {
+                            Text("Recent Searches")
+                            Spacer()
+                            Button("Clear") {
+                                searchHistory = []
+                                UserDefaults.standard.removeObject(forKey: Self.historyKey)
+                            }
+                            .font(.caption)
+                            .textCase(nil)
+                        }
+                    }
+                }
+                .listStyle(.plain)
+            } else if hasSearched && items.isEmpty {
                 Spacer()
                 Text("No results found")
                     .foregroundColor(.secondary)
                 Spacer()
-            } else {
-                List {
-                    if !results.artists.isEmpty {
-                        Section("Artists") {
-                            ForEach(results.artists) { artist in
-                                HStack(spacing: 12) {
-                                    SearchArtworkView(url: artist.imageUrl, isCircle: true)
-                                    Text(artist.name)
-                                        .font(.body)
-                                }
+            } else if !items.isEmpty {
+                List(items) { item in
+                    switch item {
+                    case .artist(_, let name, let imageUrl):
+                        HStack(spacing: 12) {
+                            SearchArtworkView(url: imageUrl, isCircle: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                Text("Artist")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         }
-                    }
 
-                    if !results.albums.isEmpty {
-                        Section("Albums & EPs") {
-                            ForEach(results.albums) { album in
-                                HStack(spacing: 12) {
-                                    SearchArtworkView(url: album.imageUrl, isCircle: false)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(album.name)
-                                            .font(.body)
-                                            .lineLimit(1)
-                                        HStack(spacing: 4) {
-                                            Text(album.artistName)
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                                .lineLimit(1)
-                                            if let label = album.typeLabel {
-                                                Text("·")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                                Text(label)
-                                                    .font(.caption)
-                                                    .foregroundColor(.orange)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if !results.tracks.isEmpty {
-                        Section("Songs") {
-                            ForEach(results.tracks) { track in
-                                HStack(spacing: 12) {
-                                    SearchArtworkView(url: track.imageUrl, isCircle: false)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(track.name)
-                                            .font(.body)
-                                            .lineLimit(1)
-                                        Text(track.artistName)
+                    case .album(_, let name, let artistName, let albumType, let imageUrl):
+                        HStack(spacing: 12) {
+                            SearchArtworkView(url: imageUrl, isCircle: false)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Text(artistName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                    if albumType != "album" {
+                                        Text("·")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                            .lineLimit(1)
+                                        Text(albumType == "single" ? "EP / Single" : "Compilation")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
                                     }
+                                }
+                            }
+                        }
+
+                    case .track(let track):
+                        NavigationLink(value: track) {
+                            HStack(spacing: 12) {
+                                SearchArtworkView(url: track.imageUrl, isCircle: false)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(track.name)
+                                        .font(.body)
+                                        .lineLimit(1)
+                                    Text(track.artistName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
                                 }
                             }
                         }
                     }
                 }
-                .listStyle(.insetGrouped)
+                .listStyle(.plain)
+                .navigationDestination(for: TrackResult.self) { track in
+                    SongDetailView(track: track)
+                }
+            } else {
+                Spacer()
             }
         }
+        .navigationTitle("Search")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { loadHistory() }
+        .onChange(of: query) { _, newValue in
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            searchTask?.cancel()
+            if trimmed.isEmpty {
+                items = []
+                hasSearched = false
+                status = ""
+                return
+            }
+            searchTask = Task {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+                await searchSpotify()
+            }
+        }
+    }
+
+    private func triggerSearch(for term: String) {
+        searchTask?.cancel()
+        searchTask = Task { await searchSpotify() }
     }
 
     private func searchSpotify() async {
@@ -161,9 +228,7 @@ struct SearchView: View {
         guard !trimmed.isEmpty else { return }
 
         await MainActor.run {
-            status = "Searching..."
-            results = SearchResults()
-            hasSearched = false
+            status = ""
         }
 
         do {
@@ -194,7 +259,6 @@ struct SearchView: View {
             let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
 
             guard (200...299).contains(httpStatus) else {
-                // Try to extract error message from response body
                 let errorBody = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
                 let serverMessage = errorBody?["error"] as? String
                     ?? errorBody?["message"] as? String
@@ -215,55 +279,68 @@ struct SearchView: View {
                 return
             }
 
-            var newResults = SearchResults()
+            // Collect all results with a relevance score
+            let q = trimmed.lowercased()
+            var scored: [(item: SearchItem, score: Int)] = []
 
-            // Parse artists
             if let artists = json["artists"] as? [String: Any],
-               let items = artists["items"] as? [[String: Any]] {
-                for artist in items {
+               let list = artists["items"] as? [[String: Any]] {
+                for (i, artist) in list.enumerated() {
                     let name = artist["name"] as? String ?? "Unknown"
                     let id = artist["id"] as? String ?? UUID().uuidString
                     let imageUrl = Self.firstImageUrl(from: artist)
-                    newResults.artists.append(ArtistResult(id: id, name: name, imageUrl: imageUrl))
+                    let item = SearchItem.artist(id: id, name: name, imageUrl: imageUrl)
+                    scored.append((item, Self.relevanceScore(name: name, query: q, index: i)))
                 }
             }
 
-            // Parse albums
             if let albums = json["albums"] as? [String: Any],
-               let items = albums["items"] as? [[String: Any]] {
-                for album in items {
+               let list = albums["items"] as? [[String: Any]] {
+                for (i, album) in list.enumerated() {
                     let name = album["name"] as? String ?? "Unknown"
                     let id = album["id"] as? String ?? UUID().uuidString
                     let albumType = album["album_type"] as? String ?? "album"
-                    let artistName = Self.firstArtistName(from: album)
+                    let artistName = Self.allArtistNames(from: album)
                     let imageUrl = Self.firstImageUrl(from: album)
-                    newResults.albums.append(AlbumResult(
-                        id: id, name: name, artistName: artistName,
-                        albumType: albumType, imageUrl: imageUrl
-                    ))
+                    let item = SearchItem.album(id: id, name: name, artistName: artistName,
+                                                albumType: albumType, imageUrl: imageUrl)
+                    scored.append((item, Self.relevanceScore(name: name, query: q, index: i)))
                 }
             }
 
-            // Parse tracks
             if let tracks = json["tracks"] as? [String: Any],
-               let items = tracks["items"] as? [[String: Any]] {
-                for track in items {
+               let list = tracks["items"] as? [[String: Any]] {
+                for (i, track) in list.enumerated() {
                     let name = track["name"] as? String ?? "Unknown"
                     let id = track["id"] as? String ?? UUID().uuidString
-                    let artistName = Self.firstArtistName(from: track)
-                    // Track images come from the album object
+                    let artistName = Self.allArtistNames(from: track)
                     let albumDict = track["album"] as? [String: Any]
+                    let albumName = albumDict?["name"] as? String ?? ""
                     let imageUrl = albumDict.flatMap { Self.firstImageUrl(from: $0) }
-                    newResults.tracks.append(TrackResult(
-                        id: id, name: name, artistName: artistName, imageUrl: imageUrl
-                    ))
+                    let tr = TrackResult(id: id, name: name, artistName: artistName,
+                                         albumName: albumName, imageUrl: imageUrl)
+                    scored.append((.track(tr), Self.relevanceScore(name: name, query: q, index: i)))
                 }
             }
 
+            // Sort by score descending, then by original order within same score
+            let sorted = scored
+                .enumerated()
+                .sorted { a, b in
+                    if a.element.score != b.element.score {
+                        return a.element.score > b.element.score
+                    }
+                    return a.offset < b.offset
+                }
+                .map(\.element.item)
+
+            guard !Task.isCancelled else { return }
+
             await MainActor.run {
-                results = newResults
+                items = sorted
                 hasSearched = true
                 status = ""
+                saveToHistory(trimmed)
             }
 
         } catch {
@@ -274,22 +351,46 @@ struct SearchView: View {
         }
     }
 
-    private static func firstImageUrl(from item: [String: Any]) -> URL? {
+    /// Score an item's name against the query. Higher = better match.
+    /// Index is the Spotify-returned position (lower = Spotify thinks more relevant).
+    private static func relevanceScore(name: String, query: String, index: Int) -> Int {
+        let lower = name.lowercased()
+        let positionBonus = max(10 - index, 0) // Spotify's own ranking, 10..0
+        if lower == query { return 100 + positionBonus }
+        if lower.hasPrefix(query) { return 75 + positionBonus }
+        if lower.contains(query) { return 50 + positionBonus }
+        return positionBonus
+    }
+
+    private static func firstImageUrl(from item: [String: Any], preferLarge: Bool = false) -> URL? {
         guard let images = item["images"] as? [[String: Any]],
-              let first = images.last, // last = smallest image, good for thumbnails
-              let urlString = first["url"] as? String else {
+              let picked = preferLarge ? images.first : images.last,
+              let urlString = picked["url"] as? String else {
             return nil
         }
         return URL(string: urlString)
     }
 
-    private static func firstArtistName(from item: [String: Any]) -> String {
-        guard let artists = item["artists"] as? [[String: Any]],
-              let first = artists.first,
-              let name = first["name"] as? String else {
+    private static func allArtistNames(from item: [String: Any]) -> String {
+        guard let artists = item["artists"] as? [[String: Any]], !artists.isEmpty else {
             return "Unknown Artist"
         }
-        return name
+        return artists.compactMap { $0["name"] as? String }.joined(separator: ", ")
+    }
+
+    private func loadHistory() {
+        searchHistory = UserDefaults.standard.stringArray(forKey: Self.historyKey) ?? []
+    }
+
+    private func saveToHistory(_ term: String) {
+        var history = UserDefaults.standard.stringArray(forKey: Self.historyKey) ?? []
+        history.removeAll { $0.lowercased() == term.lowercased() }
+        history.insert(term, at: 0)
+        if history.count > Self.maxHistory {
+            history = Array(history.prefix(Self.maxHistory))
+        }
+        UserDefaults.standard.set(history, forKey: Self.historyKey)
+        searchHistory = history
     }
 }
 
@@ -315,5 +416,175 @@ struct SearchArtworkView: View {
         }
         .frame(width: 44, height: 44)
         .clipShape(isCircle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 6)))
+    }
+}
+
+// MARK: - Song Detail View
+
+struct SongDetailView: View {
+    let track: TrackResult
+    @State private var rating: Double = 0
+    @State private var isSaving = false
+    @State private var existingDocId: String?
+
+    private var reviewDocId: String? {
+        guard let uid = Auth.auth().currentUser?.uid else { return nil }
+        return "\(uid)_\(track.id)"
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // Album art
+                AsyncImage(url: track.imageUrl) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    default:
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.gray)
+                            }
+                    }
+                }
+                .frame(maxWidth: 280)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(radius: 8)
+
+                // Song info
+                VStack(spacing: 6) {
+                    Text(track.name)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+
+                    Text(track.artistName)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+
+                    if !track.albumName.isEmpty {
+                        Text(track.albumName)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+
+                // Rating
+                VStack(spacing: 8) {
+                    Text("Your Rating")
+                        .font(.headline)
+
+                    StarRatingView(rating: $rating)
+
+                    if rating > 0 {
+                        Text(formattedRating)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if isSaving {
+                    ProgressView()
+                }
+            }
+            .padding(.top, 20)
+        }
+        .navigationTitle("Rate Song")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadRating() }
+        .onChange(of: rating) { _, newValue in
+            Task { await saveRating(newValue) }
+        }
+    }
+
+    private var formattedRating: String {
+        if rating == rating.rounded() {
+            return "\(Int(rating)) / 5"
+        }
+        return String(format: "%.1f / 5", rating)
+    }
+
+    private func loadRating() async {
+        guard let docId = reviewDocId else { return }
+        do {
+            let doc = try await Firestore.firestore()
+                .collection("reviews").document(docId).getDocument()
+            if let data = doc.data(), let saved = data["rating"] as? Double {
+                await MainActor.run { rating = saved }
+            }
+        } catch {
+            // No existing rating — that's fine
+        }
+    }
+
+    private func saveRating(_ value: Double) async {
+        guard let uid = Auth.auth().currentUser?.uid,
+              let docId = reviewDocId else { return }
+
+        await MainActor.run { isSaving = true }
+
+        let data: [String: Any] = [
+            "userId": uid,
+            "trackId": track.id,
+            "trackName": track.name,
+            "artistName": track.artistName,
+            "albumName": track.albumName,
+            "albumImageUrl": track.imageUrl?.absoluteString ?? "",
+            "rating": value,
+            "updatedAt": FieldValue.serverTimestamp()
+        ]
+
+        do {
+            try await Firestore.firestore()
+                .collection("reviews").document(docId)
+                .setData(data, merge: true)
+        } catch {
+            // Silently fail for now — rating is still shown locally
+        }
+
+        await MainActor.run { isSaving = false }
+    }
+}
+
+// MARK: - Star Rating View
+
+struct StarRatingView: View {
+    @Binding var rating: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(1...5, id: \.self) { star in
+                Image(systemName: starImage(for: star))
+                    .font(.system(size: 36))
+                    .foregroundStyle(.yellow)
+                    .onTapGesture {
+                        let full = Double(star)
+                        let half = full - 0.5
+                        if rating == full {
+                            rating = half       // filled → half
+                        } else if rating == half {
+                            rating = 0           // half → clear
+                        } else {
+                            rating = full        // anything else → filled
+                        }
+                    }
+            }
+        }
+    }
+
+    private func starImage(for position: Int) -> String {
+        if rating >= Double(position) {
+            return "star.fill"
+        } else if rating >= Double(position) - 0.5 {
+            return "star.leadinghalf.filled"
+        } else {
+            return "star"
+        }
     }
 }
