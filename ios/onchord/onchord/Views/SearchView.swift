@@ -17,6 +17,20 @@ struct TrackResult: Identifiable, Hashable {
     let imageUrl: URL?
 }
 
+struct AlbumResult: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let artistName: String
+    let albumType: String
+    let imageUrl: URL?
+}
+
+struct ArtistResult: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let imageUrl: URL?
+}
+
 enum SearchItem: Identifiable {
     case artist(id: String, name: String, imageUrl: URL?)
     case album(id: String, name: String, artistName: String, albumType: String, imageUrl: URL?)
@@ -136,38 +150,42 @@ struct SearchView: View {
             } else if !items.isEmpty {
                 List(items) { item in
                     switch item {
-                    case .artist(_, let name, let imageUrl):
-                        HStack(spacing: 12) {
-                            SearchArtworkView(url: imageUrl, isCircle: true)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(name)
-                                    .font(.body)
-                                    .lineLimit(1)
-                                Text("Artist")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                    case .artist(let id, let name, let imageUrl):
+                        NavigationLink(value: ArtistResult(id: id, name: name, imageUrl: imageUrl)) {
+                            HStack(spacing: 12) {
+                                SearchArtworkView(url: imageUrl, isCircle: true)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(name)
+                                        .font(.body)
+                                        .lineLimit(1)
+                                    Text("Artist")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                             }
                         }
 
-                    case .album(_, let name, let artistName, let albumType, let imageUrl):
-                        HStack(spacing: 12) {
-                            SearchArtworkView(url: imageUrl, isCircle: false)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(name)
-                                    .font(.body)
-                                    .lineLimit(1)
-                                HStack(spacing: 4) {
-                                    Text(artistName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+                    case .album(let id, let name, let artistName, let albumType, let imageUrl):
+                        NavigationLink(value: AlbumResult(id: id, name: name, artistName: artistName, albumType: albumType, imageUrl: imageUrl)) {
+                            HStack(spacing: 12) {
+                                SearchArtworkView(url: imageUrl, isCircle: false)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(name)
+                                        .font(.body)
                                         .lineLimit(1)
-                                    if albumType != "album" {
-                                        Text("·")
+                                    HStack(spacing: 4) {
+                                        Text(artistName)
                                             .font(.caption)
                                             .foregroundColor(.secondary)
-                                        Text(albumType == "single" ? "EP / Single" : "Compilation")
-                                            .font(.caption)
-                                            .foregroundColor(.orange)
+                                            .lineLimit(1)
+                                        if albumType != "album" {
+                                            Text("·")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Text(albumType == "single" ? "EP / Single" : "Compilation")
+                                                .font(.caption)
+                                                .foregroundColor(.orange)
+                                        }
                                     }
                                 }
                             }
@@ -193,6 +211,12 @@ struct SearchView: View {
                 .listStyle(.plain)
                 .navigationDestination(for: TrackResult.self) { track in
                     SongDetailView(track: track)
+                }
+                .navigationDestination(for: AlbumResult.self) { album in
+                    AlbumDetailView(album: album)
+                }
+                .navigationDestination(for: ArtistResult.self) { artist in
+                    ArtistDetailView(artist: artist)
                 }
             } else {
                 Spacer()
@@ -585,6 +609,479 @@ struct StarRatingView: View {
             return "star.leadinghalf.filled"
         } else {
             return "star"
+        }
+    }
+}
+
+// MARK: - Album Detail View
+
+struct AlbumDetailView: View {
+    let album: AlbumResult
+    @State private var tracks: [TrackResult] = []
+    @State private var ratings: [String: Double] = [:]  // trackId -> rating
+    @State private var largeImageUrl: URL?
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    private var averageRating: Double? {
+        guard !tracks.isEmpty else { return nil }
+        let rated = tracks.compactMap { ratings[$0.id] }
+        guard rated.count == tracks.count else { return nil }
+        return rated.reduce(0, +) / Double(rated.count)
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Album artwork
+                AsyncImage(url: largeImageUrl ?? album.imageUrl) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    default:
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.gray.opacity(0.2))
+                            .aspectRatio(1, contentMode: .fit)
+                            .overlay {
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.gray)
+                            }
+                    }
+                }
+                .frame(maxWidth: 280)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(radius: 8)
+
+                // Album info
+                VStack(spacing: 6) {
+                    Text(album.name)
+                        .font(.title2.bold())
+                        .multilineTextAlignment(.center)
+
+                    Text(album.artistName)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+
+                    if album.albumType != "album" {
+                        Text(album.albumType == "single" ? "EP / Single" : "Compilation")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+                .padding(.horizontal)
+
+                // Average rating
+                if let avg = averageRating {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.yellow)
+                        Text(String(format: "%.1f", avg))
+                            .font(.headline)
+                        Text("average")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if isLoading {
+                    ProgressView()
+                        .padding(.top, 20)
+                } else if let error = errorMessage {
+                    Text(error)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 20)
+                } else {
+                    // Track list
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                            NavigationLink(value: track) {
+                                HStack(spacing: 12) {
+                                    Text("\(index + 1)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 24, alignment: .trailing)
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(track.name)
+                                            .font(.body)
+                                            .lineLimit(1)
+                                            .foregroundColor(.primary)
+                                        if track.artistName != album.artistName {
+                                            Text(track.artistName)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+
+                                    Spacer()
+
+                                    if let r = ratings[track.id] {
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "star.fill")
+                                                .font(.caption2)
+                                                .foregroundColor(.yellow)
+                                            Text(r == r.rounded() ? "\(Int(r))" : String(format: "%.1f", r))
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 10)
+                            }
+
+                            if index < tracks.count - 1 {
+                                Divider().padding(.leading, 48)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.top, 20)
+        }
+        .navigationTitle("Album")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadAlbumTracks() }
+        .onAppear { Task { await loadRatings() } }
+    }
+
+    private func loadAlbumTracks() async {
+        do {
+            guard let user = Auth.auth().currentUser else {
+                await MainActor.run { errorMessage = "Not signed in"; isLoading = false }
+                return
+            }
+
+            let idToken = try await user.getIDToken()
+
+            var request = URLRequest(
+                url: URL(string: "https://us-east1-onchord-ec86c.cloudfunctions.net/spotifyAlbumTracks")!
+            )
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["albumId": album.id])
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(httpStatus) else {
+                let errorBody = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+                let msg = errorBody?["error"] as? String ?? "Error \(httpStatus)"
+                await MainActor.run { errorMessage = msg; isLoading = false }
+                return
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                await MainActor.run { errorMessage = "Unexpected response"; isLoading = false }
+                return
+            }
+
+            // Get large album image
+            let images = json["images"] as? [[String: Any]] ?? []
+            let largeUrl = images.first.flatMap { $0["url"] as? String }.flatMap { URL(string: $0) }
+
+            // Parse tracks
+            let tracksObj = json["tracks"] as? [String: Any]
+            let trackItems = tracksObj?["items"] as? [[String: Any]] ?? []
+            let albumImageUrl = largeUrl ?? album.imageUrl
+
+            let parsed: [TrackResult] = trackItems.compactMap { item in
+                guard let id = item["id"] as? String,
+                      let name = item["name"] as? String else { return nil }
+                let artists = item["artists"] as? [[String: Any]] ?? []
+                let artistName = artists.compactMap { $0["name"] as? String }.joined(separator: ", ")
+                return TrackResult(
+                    id: id, name: name, artistName: artistName.isEmpty ? "Unknown Artist" : artistName,
+                    albumName: album.name, imageUrl: albumImageUrl
+                )
+            }
+
+            await MainActor.run {
+                largeImageUrl = largeUrl
+                tracks = parsed
+                isLoading = false
+            }
+
+            await loadRatings()
+
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
+        }
+    }
+
+    private func loadRatings() async {
+        guard let uid = Auth.auth().currentUser?.uid, !tracks.isEmpty else { return }
+
+        var newRatings: [String: Double] = [:]
+        for track in tracks {
+            let docId = "\(uid)_\(track.id)"
+            do {
+                let doc = try await Firestore.firestore()
+                    .collection("reviews").document(docId).getDocument()
+                if let data = doc.data(), let rating = data["rating"] as? Double {
+                    newRatings[track.id] = rating
+                }
+            } catch {
+                // Skip — no rating for this track
+            }
+        }
+
+        await MainActor.run { ratings = newRatings }
+    }
+}
+
+// MARK: - Artist Detail View
+
+struct ArtistDetailView: View {
+    let artist: ArtistResult
+    @State private var largeImageUrl: URL?
+    @State private var albums: [AlbumResult] = []
+    @State private var singles: [AlbumResult] = []
+    @State private var releaseYears: [String: String] = [:]
+    @State private var isLoading = true
+    @State private var errorMessage: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Artist image
+                AsyncImage(url: largeImageUrl ?? artist.imageUrl) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    default:
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundColor(.gray)
+                            }
+                    }
+                }
+                .frame(width: 200, height: 200)
+                .clipShape(Circle())
+                .shadow(radius: 8)
+
+                Text(artist.name)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                if isLoading {
+                    ProgressView()
+                        .padding(.top, 20)
+                } else if let error = errorMessage {
+                    Text(error)
+                        .foregroundColor(.secondary)
+                        .padding(.top, 20)
+                } else {
+                    // Albums section
+                    if !albums.isEmpty {
+                        discographySection(title: "Albums", items: albums)
+                    }
+
+                    // Singles & EPs section
+                    if !singles.isEmpty {
+                        discographySection(title: "Singles & EPs", items: singles)
+                    }
+
+                    if albums.isEmpty && singles.isEmpty {
+                        Text("No releases found")
+                            .foregroundColor(.secondary)
+                            .padding(.top, 20)
+                    }
+                }
+            }
+            .padding(.top, 20)
+        }
+        .navigationTitle("Artist")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await loadArtistAlbums() }
+    }
+
+    @ViewBuilder
+    private func discographySection(title: String, items: [AlbumResult]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .padding(.horizontal)
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, album in
+                    NavigationLink(value: album) {
+                        HStack(spacing: 12) {
+                            AsyncImage(url: album.imageUrl) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                default:
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(Color.gray.opacity(0.2))
+                                        .overlay {
+                                            Image(systemName: "music.note")
+                                                .foregroundColor(.gray)
+                                                .font(.caption)
+                                        }
+                                }
+                            }
+                            .frame(width: 48, height: 48)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(album.name)
+                                    .font(.body)
+                                    .lineLimit(1)
+                                    .foregroundColor(.primary)
+                                HStack(spacing: 4) {
+                                    if let year = releaseYears[album.id] {
+                                        Text(year)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    if album.albumType != "album" {
+                                        Text("·")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                        Text(album.albumType == "single" ? "Single" : "Compilation")
+                                            .font(.caption)
+                                            .foregroundColor(.orange)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 10)
+                    }
+
+                    if index < items.count - 1 {
+                        Divider().padding(.leading, 72)
+                    }
+                }
+            }
+        }
+    }
+
+    private func loadArtistAlbums() async {
+        do {
+            guard let user = Auth.auth().currentUser else {
+                await MainActor.run { errorMessage = "Not signed in"; isLoading = false }
+                return
+            }
+
+            let idToken = try await user.getIDToken()
+
+            var request = URLRequest(
+                url: URL(string: "https://us-east1-onchord-ec86c.cloudfunctions.net/spotifyArtistAlbums")!
+            )
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["artistId": artist.id])
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            guard (200...299).contains(httpStatus) else {
+                let rawBody = String(data: data, encoding: .utf8) ?? "(non-utf8)"
+                print("[ArtistDetail] HTTP \(httpStatus) full response: \(rawBody)")
+                let errorBody = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+                // Check for nested Spotify error format: {"spotifyError":{"error":{"message":"..."}}}
+                let msg: String
+                if let spotifyErr = errorBody?["spotifyError"] as? [String: Any],
+                   let errObj = spotifyErr["error"] as? [String: Any],
+                   let message = errObj["message"] as? String {
+                    let source = errorBody?["source"] as? String ?? "unknown"
+                    msg = "\(source): \(message)"
+                } else {
+                    msg = errorBody?["error"] as? String ?? "Error \(httpStatus)"
+                }
+                await MainActor.run { errorMessage = msg; isLoading = false }
+                return
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                await MainActor.run { errorMessage = "Unexpected response"; isLoading = false }
+                return
+            }
+
+            // Parse artist profile for large image
+            let artistObj = json["artist"] as? [String: Any]
+            let images = artistObj?["images"] as? [[String: Any]] ?? []
+            let largeUrl = images.first.flatMap { $0["url"] as? String }.flatMap { URL(string: $0) }
+
+            // Parse albums
+            let albumsObj = json["albums"] as? [String: Any]
+            let albumItems = albumsObj?["items"] as? [[String: Any]] ?? []
+
+            var albumsWithDate: [(AlbumResult, String)] = []
+            var singlesWithDate: [(AlbumResult, String)] = []
+
+            for item in albumItems {
+                guard let id = item["id"] as? String,
+                      let name = item["name"] as? String else { continue }
+                let albumType = item["album_type"] as? String ?? "album"
+                let artists = item["artists"] as? [[String: Any]] ?? []
+                let artistName = artists.compactMap { $0["name"] as? String }.joined(separator: ", ")
+                let itemImages = item["images"] as? [[String: Any]] ?? []
+                let imageUrl = itemImages.first.flatMap { $0["url"] as? String }.flatMap { URL(string: $0) }
+                let releaseDate = item["release_date"] as? String ?? ""
+
+                let album = AlbumResult(
+                    id: id, name: name,
+                    artistName: artistName.isEmpty ? "Unknown Artist" : artistName,
+                    albumType: albumType, imageUrl: imageUrl
+                )
+
+                if albumType == "album" {
+                    albumsWithDate.append((album, releaseDate))
+                } else {
+                    singlesWithDate.append((album, releaseDate))
+                }
+            }
+
+            // Sort by release_date descending (newest first)
+            albumsWithDate.sort { $0.1 > $1.1 }
+            singlesWithDate.sort { $0.1 > $1.1 }
+
+            // Build release year lookup
+            var years: [String: String] = [:]
+            for (album, date) in albumsWithDate + singlesWithDate {
+                let year = String(date.prefix(4))
+                if year.count == 4 { years[album.id] = year }
+            }
+
+            await MainActor.run {
+                self.largeImageUrl = largeUrl
+                self.albums = albumsWithDate.map(\.0)
+                self.singles = singlesWithDate.map(\.0)
+                self.releaseYears = years
+                isLoading = false
+            }
+
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                isLoading = false
+            }
         }
     }
 }
