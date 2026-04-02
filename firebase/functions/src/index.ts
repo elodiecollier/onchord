@@ -412,7 +412,11 @@ export const spotifySearch = onRequest(async (req, res) => {
 
     // Save rotated refresh token if Spotify issued a new one
     if (refreshJson.refresh_token) {
-      await docRef.update({refreshToken: refreshJson.refresh_token});
+      try {
+        await docRef.update({refreshToken: refreshJson.refresh_token});
+      } catch (e) {
+        logger.warn("Failed to save rotated refresh token", e);
+      }
     }
 
     // Call Spotify search API

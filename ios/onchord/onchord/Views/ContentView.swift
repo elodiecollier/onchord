@@ -13,7 +13,9 @@ struct ContentView: View {
     var body: some View {
         VStack {
             if authManager.isSignedIn {
-                SearchView()
+                NavigationStack {
+                    SearchView()
+                }
             } else {
                 VStack(spacing: 20) {
                     Text("Welcome to Onchord")
