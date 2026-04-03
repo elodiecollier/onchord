@@ -71,15 +71,6 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Button("Log out") {
-                    authManager.logout()
-                }
-                .foregroundColor(.red)
-                .padding(.trailing)
-            }
-
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
