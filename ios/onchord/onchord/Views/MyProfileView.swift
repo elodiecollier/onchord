@@ -33,91 +33,127 @@ struct MyProfileView: View {
     @State private var ratedSongs: [RatedSong] = []
     @State private var ratedAlbums: [RatedAlbum] = []
     @State private var isLoading = true
+    @State private var followerCount: Int = 0
+    @State private var followingCount: Int = 0
 
     var body: some View {
         Group {
             if isLoading {
                 ProgressView()
-            } else if ratedSongs.isEmpty {
-                VStack(spacing: 12) {
-                    Text("No ratings yet")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
-                    Text("Search for songs and rate them to see your activity here.")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                }
             } else {
                 List {
-                    Section("Rated Songs") {
-                        ForEach(ratedSongs) { song in
-                            NavigationLink(value: TrackResult(
-                                id: song.trackId,
-                                name: song.trackName,
-                                artistName: song.artistName,
-                                albumName: song.albumName,
-                                imageUrl: song.albumImageUrl
-                            )) {
-                                HStack(spacing: 12) {
-                                    SearchArtworkView(url: song.albumImageUrl, isCircle: false)
+                    Section {
+                        HStack(spacing: 0) {
+                            NavigationLink(value: FollowListMode.followers(userId: Auth.auth().currentUser?.uid ?? "")) {
+                                VStack(spacing: 4) {
+                                    Text("\(followerCount)")
+                                        .font(.title2.bold())
+                                    Text("Followers")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.plain)
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(song.trackName)
-                                            .font(.body)
-                                            .lineLimit(1)
-                                        Text(song.artistName)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
+                            NavigationLink(value: FollowListMode.following(userId: Auth.auth().currentUser?.uid ?? "")) {
+                                VStack(spacing: 4) {
+                                    Text("\(followingCount)")
+                                        .font(.title2.bold())
+                                    Text("Following")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 8)
+                    }
 
-                                    Spacer()
+                    if ratedSongs.isEmpty {
+                        Section {
+                            VStack(spacing: 12) {
+                                Text("No ratings yet")
+                                    .font(.title3)
+                                    .foregroundColor(.secondary)
+                                Text("Search for songs and rate them to see your activity here.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 20)
+                        }
+                    } else {
+                        Section("Rated Songs") {
+                            ForEach(ratedSongs) { song in
+                                NavigationLink(value: TrackResult(
+                                    id: song.trackId,
+                                    name: song.trackName,
+                                    artistName: song.artistName,
+                                    albumName: song.albumName,
+                                    imageUrl: song.albumImageUrl
+                                )) {
+                                    HStack(spacing: 12) {
+                                        SearchArtworkView(url: song.albumImageUrl, isCircle: false)
 
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "star.fill")
-                                            .font(.caption2)
-                                            .foregroundColor(.yellow)
-                                        Text(song.rating == song.rating.rounded()
-                                             ? "\(Int(song.rating))"
-                                             : String(format: "%.1f", song.rating))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(song.trackName)
+                                                .font(.body)
+                                                .lineLimit(1)
+                                            Text(song.artistName)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+
+                                        Spacer()
+
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "star.fill")
+                                                .font(.caption2)
+                                                .foregroundColor(.yellow)
+                                            Text(song.rating == song.rating.rounded()
+                                                 ? "\(Int(song.rating))"
+                                                 : String(format: "%.1f", song.rating))
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    if !ratedAlbums.isEmpty {
-                        Section("Rated Albums") {
-                            ForEach(ratedAlbums) { album in
-                                HStack(spacing: 12) {
-                                    SearchArtworkView(url: album.albumImageUrl, isCircle: false)
+                        if !ratedAlbums.isEmpty {
+                            Section("Rated Albums") {
+                                ForEach(ratedAlbums) { album in
+                                    HStack(spacing: 12) {
+                                        SearchArtworkView(url: album.albumImageUrl, isCircle: false)
 
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(album.albumName)
-                                            .font(.body)
-                                            .lineLimit(1)
-                                        Text(album.artistName)
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                            .lineLimit(1)
-                                    }
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(album.albumName)
+                                                .font(.body)
+                                                .lineLimit(1)
+                                            Text(album.artistName)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
 
-                                    Spacer()
+                                        Spacer()
 
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "star.fill")
-                                            .font(.caption2)
-                                            .foregroundColor(.yellow)
-                                        Text(String(format: "%.1f", album.averageRating))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        Text("(\(album.ratedCount))")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
+                                        HStack(spacing: 2) {
+                                            Image(systemName: "star.fill")
+                                                .font(.caption2)
+                                                .foregroundColor(.yellow)
+                                            Text(String(format: "%.1f", album.averageRating))
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                            Text("(\(album.ratedCount))")
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                             }
@@ -127,6 +163,9 @@ struct MyProfileView: View {
                 .listStyle(.insetGrouped)
                 .navigationDestination(for: TrackResult.self) { track in
                     SongDetailView(track: track)
+                }
+                .navigationDestination(for: FollowListMode.self) { mode in
+                    FollowListView(mode: mode)
                 }
             }
         }
@@ -140,7 +179,31 @@ struct MyProfileView: View {
                 .foregroundColor(.red)
             }
         }
-        .task { await loadReviews() }
+        .task {
+            await loadReviews()
+            await loadFollowCounts()
+        }
+    }
+
+    private func loadFollowCounts() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let db = Firestore.firestore()
+
+        do {
+            let followersSnapshot = try await db.collection("follows")
+                .whereField("followingId", isEqualTo: uid)
+                .getDocuments()
+            let followingSnapshot = try await db.collection("follows")
+                .whereField("followerId", isEqualTo: uid)
+                .getDocuments()
+
+            await MainActor.run {
+                followerCount = followersSnapshot.documents.count
+                followingCount = followingSnapshot.documents.count
+            }
+        } catch {
+            // Silently fail — counts stay at 0
+        }
     }
 
     private func loadReviews() async {
