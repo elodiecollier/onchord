@@ -223,9 +223,11 @@ export const spotifyLogin = onRequest(async (req, res) => {
 
     // Create/update user profile
     const profileImageUrl = profile.images?.[0]?.url ?? null;
+    const displayName = profile.display_name ?? null;
     await admin.firestore().collection("users").doc(uid).set(
       {
-        displayName: profile.display_name ?? null,
+        displayName,
+        displayNameLower: displayName ? displayName.toLowerCase() : null,
         email: profile.email ?? null,
         profileImageUrl,
         spotifyId: profile.id,
