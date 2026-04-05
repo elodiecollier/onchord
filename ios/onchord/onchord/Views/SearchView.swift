@@ -53,20 +53,33 @@ enum SearchItem: Identifiable {
     }
 }
 
+struct UserResult: Identifiable, Hashable {
+    let id: String
+    let displayName: String
+    let profileImageUrl: URL?
+}
+
+enum SearchMode: String, CaseIterable {
+    case music = "Music"
+    case people = "People"
+}
+
 struct SearchView: View {
     @EnvironmentObject private var authManager: AuthManager
     @State private var query = ""
     @State private var items: [SearchItem] = []
+    @State private var userResults: [UserResult] = []
     @State private var status = ""
     @State private var hasSearched = false
     @State private var searchTask: Task<Void, Never>?
     @State private var searchHistory: [String] = []
+    @State private var searchMode: SearchMode = .music
 
     private static let historyKey = "searchHistory"
     private static let maxHistory = 20
 
     private var showHistory: Bool {
-        query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && items.isEmpty
+        searchMode == .music && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && items.isEmpty
     }
 
     var body: some View {
@@ -74,13 +87,14 @@ struct SearchView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                TextField("Search music...", text: $query)
+                TextField(searchMode == .music ? "Search music..." : "Search people...", text: $query)
                     .textContentType(.none)
                     .autocorrectionDisabled()
                 if !query.isEmpty {
                     Button {
                         query = ""
                         items = []
+                        userResults = []
                         hasSearched = false
                         status = ""
                     } label: {
@@ -92,6 +106,15 @@ struct SearchView: View {
             .padding(10)
             .background(Color(.systemGray6))
             .cornerRadius(10)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+
+            Picker("Search Mode", selection: $searchMode) {
+                ForEach(SearchMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.bottom, 8)
 
@@ -133,6 +156,30 @@ struct SearchView: View {
                     }
                 }
                 .listStyle(.plain)
+            } else if searchMode == .people {
+                if hasSearched && userResults.isEmpty {
+                    Spacer()
+                    Text("No people found")
+                        .foregroundColor(.secondary)
+                    Spacer()
+                } else if !userResults.isEmpty {
+                    List(userResults) { user in
+                        NavigationLink(value: user) {
+                            HStack(spacing: 12) {
+                                SearchArtworkView(url: user.profileImageUrl, isCircle: true)
+                                Text(user.displayName)
+                                    .font(.body)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .navigationDestination(for: UserResult.self) { user in
+                        UserProfileView(user: user)
+                    }
+                } else {
+                    Spacer()
+                }
             } else if hasSearched && items.isEmpty {
                 Spacer()
                 Text("No results found")
@@ -221,6 +268,7 @@ struct SearchView: View {
             searchTask?.cancel()
             if trimmed.isEmpty {
                 items = []
+                userResults = []
                 hasSearched = false
                 status = ""
                 return
@@ -228,14 +276,40 @@ struct SearchView: View {
             searchTask = Task {
                 try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
-                await searchSpotify()
+                if searchMode == .music {
+                    await searchSpotify()
+                } else {
+                    await searchUsers()
+                }
+            }
+        }
+        .onChange(of: searchMode) { _, _ in
+            items = []
+            userResults = []
+            hasSearched = false
+            status = ""
+            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            searchTask?.cancel()
+            searchTask = Task {
+                if searchMode == .music {
+                    await searchSpotify()
+                } else {
+                    await searchUsers()
+                }
             }
         }
     }
 
     private func triggerSearch(for term: String) {
         searchTask?.cancel()
-        searchTask = Task { await searchSpotify() }
+        searchTask = Task {
+            if searchMode == .music {
+                await searchSpotify()
+            } else {
+                await searchUsers()
+            }
+        }
     }
 
     private func searchSpotify() async {
@@ -358,6 +432,50 @@ struct SearchView: View {
                 saveToHistory(trimmed)
             }
 
+        } catch {
+            await MainActor.run {
+                status = "Error: \(error.localizedDescription)"
+                hasSearched = true
+            }
+        }
+    }
+
+    private func searchUsers() async {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        await MainActor.run { status = "" }
+
+        do {
+            guard let currentUid = Auth.auth().currentUser?.uid else {
+                await MainActor.run { status = "Not signed in" }
+                return
+            }
+
+            let db = Firestore.firestore()
+            let lowered = trimmed.lowercased()
+            let snapshot = try await db.collection("users")
+                .whereField("displayNameLower", isGreaterThanOrEqualTo: lowered)
+                .whereField("displayNameLower", isLessThan: lowered + "\u{f8ff}")
+                .limit(to: 20)
+                .getDocuments()
+
+            guard !Task.isCancelled else { return }
+
+            let results: [UserResult] = snapshot.documents.compactMap { doc in
+                let data = doc.data()
+                let uid = doc.documentID
+                guard uid != currentUid else { return nil }
+                let displayName = data["displayName"] as? String ?? "Unknown"
+                let profileImageUrl = (data["profileImageUrl"] as? String).flatMap { URL(string: $0) }
+                return UserResult(id: uid, displayName: displayName, profileImageUrl: profileImageUrl)
+            }
+
+            await MainActor.run {
+                userResults = results
+                hasSearched = true
+                status = ""
+            }
         } catch {
             await MainActor.run {
                 status = "Error: \(error.localizedDescription)"
