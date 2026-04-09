@@ -35,6 +35,86 @@ type SpotifyTokenResponse = {
   error_description?: string;
 };
 
+/**
+ * Get a valid Spotify access token for a user.
+ * Reuses the cached token if still valid (60s buffer).
+ * @param {string} uid - Firebase user ID.
+ * @return {Promise<string>} A valid Spotify access token.
+ */
+async function getSpotifyAccessToken(
+  uid: string
+): Promise<string> {
+  const docRef = admin
+    .firestore().collection("spotifyTokens").doc(uid);
+  const docSnap = await docRef.get();
+
+  if (!docSnap.exists) {
+    throw Object.assign(new Error("No Spotify tokens found"), {status: 404});
+  }
+
+  const data = docSnap.data() as {
+    refreshToken?: string;
+    accessToken?: string;
+    expiresAt?: number;
+  };
+
+  // Return cached token if still valid (60s buffer)
+  const now = Date.now();
+  if (data.accessToken && data.expiresAt && data.expiresAt > now + 60_000) {
+    return data.accessToken;
+  }
+
+  const refreshToken = data.refreshToken;
+  if (!refreshToken) {
+    throw Object.assign(new Error("Missing refreshToken"), {status: 400});
+  }
+
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  if (!clientId) {
+    throw Object.assign(new Error("Missing SPOTIFY_CLIENT_ID"), {status: 500});
+  }
+
+  const refreshParams = new URLSearchParams();
+  refreshParams.set("client_id", clientId);
+  refreshParams.set("grant_type", "refresh_token");
+  refreshParams.set("refresh_token", refreshToken);
+
+  const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {"Content-Type": "application/x-www-form-urlencoded"},
+    body: refreshParams.toString(),
+  });
+
+  const refreshJson = await refreshResp.json();
+
+  if (!refreshResp.ok) {
+    throw Object.assign(
+      new Error(refreshJson.error_description || "Token refresh failed"),
+      {status: refreshResp.status, body: refreshJson}
+    );
+  }
+
+  const accessToken = refreshJson.access_token as string;
+  const expiresAt = now + (refreshJson.expires_in as number) * 1000;
+
+  // Save new access token (and rotated refresh token if issued)
+  const updateData: Record<string, unknown> = {
+    accessToken,
+    expiresAt,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (refreshJson.refresh_token) {
+    updateData.refreshToken = refreshJson.refresh_token;
+  }
+  try {
+    await docRef.update(updateData);
+  } catch (e) {
+    logger.warn("Failed to save refreshed tokens", e);
+  }
+
+  return accessToken;
+}
+
 export const spotifyExchange = onRequest(async (req, res) => {
   try {
     if (req.method !== "POST") {
@@ -368,58 +448,7 @@ export const spotifySearch = onRequest(async (req, res) => {
       return;
     }
 
-    // Get refresh token from Firestore
-    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
-      res.status(404).json({error: "No Spotify tokens found"});
-      return;
-    }
-
-    const data = docSnap.data() as {refreshToken?: string};
-    const refreshToken = data.refreshToken;
-
-    if (!refreshToken) {
-      res.status(400).json({error: "Missing refreshToken"});
-      return;
-    }
-
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    if (!clientId) {
-      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID"});
-      return;
-    }
-
-    // Refresh access token
-    const refreshParams = new URLSearchParams();
-    refreshParams.set("client_id", clientId);
-    refreshParams.set("grant_type", "refresh_token");
-    refreshParams.set("refresh_token", refreshToken);
-
-    const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: refreshParams.toString(),
-    });
-
-    const refreshJson = await refreshResp.json();
-
-    if (!refreshResp.ok) {
-      res.status(refreshResp.status).json(refreshJson);
-      return;
-    }
-
-    const accessToken = refreshJson.access_token;
-
-    // Save rotated refresh token if Spotify issued a new one
-    if (refreshJson.refresh_token) {
-      try {
-        await docRef.update({refreshToken: refreshJson.refresh_token});
-      } catch (e) {
-        logger.warn("Failed to save rotated refresh token", e);
-      }
-    }
+    const accessToken = await getSpotifyAccessToken(uid);
 
     // Call Spotify search API
     const url = new URL("https://api.spotify.com/v1/search");
@@ -441,9 +470,15 @@ export const spotifySearch = onRequest(async (req, res) => {
     }
 
     res.status(200).json(searchJson);
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as {
+      status?: number; message?: string; body?: unknown;
+    };
     logger.error("spotifySearch error", error);
-    res.status(500).json({error: "Internal server error"});
+    const code = err.status || 500;
+    const body = err.body ||
+      {error: err.message || "Internal server error"};
+    res.status(code).json(body);
   }
 });
 
@@ -473,58 +508,7 @@ export const spotifyAlbumTracks = onRequest(async (req, res) => {
       return;
     }
 
-    // Get refresh token from Firestore
-    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
-      res.status(404).json({error: "No Spotify tokens found"});
-      return;
-    }
-
-    const data = docSnap.data() as {refreshToken?: string};
-    const refreshToken = data.refreshToken;
-
-    if (!refreshToken) {
-      res.status(400).json({error: "Missing refreshToken"});
-      return;
-    }
-
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    if (!clientId) {
-      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID"});
-      return;
-    }
-
-    // Refresh access token
-    const refreshParams = new URLSearchParams();
-    refreshParams.set("client_id", clientId);
-    refreshParams.set("grant_type", "refresh_token");
-    refreshParams.set("refresh_token", refreshToken);
-
-    const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: refreshParams.toString(),
-    });
-
-    const refreshJson = await refreshResp.json();
-
-    if (!refreshResp.ok) {
-      res.status(refreshResp.status).json(refreshJson);
-      return;
-    }
-
-    const accessToken = refreshJson.access_token;
-
-    // Save rotated refresh token if Spotify issued a new one
-    if (refreshJson.refresh_token) {
-      try {
-        await docRef.update({refreshToken: refreshJson.refresh_token});
-      } catch (e) {
-        logger.warn("Failed to save rotated refresh token", e);
-      }
-    }
+    const accessToken = await getSpotifyAccessToken(uid);
 
     // Call Spotify album API
     const albumResp = await fetch(
@@ -544,9 +528,15 @@ export const spotifyAlbumTracks = onRequest(async (req, res) => {
     }
 
     res.status(200).json(albumJson);
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as {
+      status?: number; message?: string; body?: unknown;
+    };
     logger.error("spotifyAlbumTracks error", error);
-    res.status(500).json({error: "Internal server error"});
+    const code = err.status || 500;
+    const body = err.body ||
+      {error: err.message || "Internal server error"};
+    res.status(code).json(body);
   }
 });
 
@@ -576,58 +566,7 @@ export const spotifyArtistAlbums = onRequest(async (req, res) => {
       return;
     }
 
-    // Get refresh token from Firestore
-    const docRef = admin.firestore().collection("spotifyTokens").doc(uid);
-    const docSnap = await docRef.get();
-
-    if (!docSnap.exists) {
-      res.status(404).json({error: "No Spotify tokens found"});
-      return;
-    }
-
-    const data = docSnap.data() as {refreshToken?: string};
-    const refreshToken = data.refreshToken;
-
-    if (!refreshToken) {
-      res.status(400).json({error: "Missing refreshToken"});
-      return;
-    }
-
-    const clientId = process.env.SPOTIFY_CLIENT_ID;
-    if (!clientId) {
-      res.status(500).json({error: "Missing SPOTIFY_CLIENT_ID"});
-      return;
-    }
-
-    // Refresh access token
-    const refreshParams = new URLSearchParams();
-    refreshParams.set("client_id", clientId);
-    refreshParams.set("grant_type", "refresh_token");
-    refreshParams.set("refresh_token", refreshToken);
-
-    const refreshResp = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/x-www-form-urlencoded"},
-      body: refreshParams.toString(),
-    });
-
-    const refreshJson = await refreshResp.json();
-
-    if (!refreshResp.ok) {
-      res.status(refreshResp.status).json(refreshJson);
-      return;
-    }
-
-    const accessToken = refreshJson.access_token;
-
-    // Save rotated refresh token if Spotify issued a new one
-    if (refreshJson.refresh_token) {
-      try {
-        await docRef.update({refreshToken: refreshJson.refresh_token});
-      } catch (e) {
-        logger.warn("Failed to save rotated refresh token", e);
-      }
-    }
+    const accessToken = await getSpotifyAccessToken(uid);
 
     // Fetch artist profile and albums in parallel
     const albumsUrl = new URL(
@@ -675,8 +614,14 @@ export const spotifyArtistAlbums = onRequest(async (req, res) => {
     }
 
     res.status(200).json({artist: artistJson, albums: albumsJson});
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as {
+      status?: number; message?: string; body?: unknown;
+    };
     logger.error("spotifyArtistAlbums error", error);
-    res.status(500).json({error: "Internal server error"});
+    const code = err.status || 500;
+    const body = err.body ||
+      {error: err.message || "Internal server error"};
+    res.status(code).json(body);
   }
 });
