@@ -6,47 +6,22 @@
 //
 
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
-
-struct RatedSong: Identifiable {
-    let id: String // review doc ID
-    let trackId: String
-    let trackName: String
-    let artistName: String
-    let albumName: String
-    let albumImageUrl: URL?
-    let rating: Double
-}
-
-struct RatedAlbum: Identifiable {
-    let id: String // albumName used as identifier
-    let albumName: String
-    let artistName: String
-    let albumImageUrl: URL?
-    let averageRating: Double
-    let ratedCount: Int
-}
 
 struct MyProfileView: View {
     @EnvironmentObject private var authManager: AuthManager
-    @State private var ratedSongs: [RatedSong] = []
-    @State private var ratedAlbums: [RatedAlbum] = []
-    @State private var isLoading = true
-    @State private var followerCount: Int = 0
-    @State private var followingCount: Int = 0
+    @State private var viewModel = MyProfileViewModel()
 
     var body: some View {
         Group {
-            if isLoading {
+            if viewModel.isLoading {
                 ProgressView()
             } else {
                 List {
                     Section {
                         HStack(spacing: 0) {
-                            NavigationLink(value: FollowListMode.followers(userId: Auth.auth().currentUser?.uid ?? "")) {
+                            NavigationLink(value: FollowListMode.followers(userId: viewModel.currentUid ?? "")) {
                                 VStack(spacing: 4) {
-                                    Text("\(followerCount)")
+                                    Text("\(viewModel.followerCount)")
                                         .font(.title2.bold())
                                     Text("Followers")
                                         .font(.caption)
@@ -56,9 +31,9 @@ struct MyProfileView: View {
                             }
                             .buttonStyle(.plain)
 
-                            NavigationLink(value: FollowListMode.following(userId: Auth.auth().currentUser?.uid ?? "")) {
+                            NavigationLink(value: FollowListMode.following(userId: viewModel.currentUid ?? "")) {
                                 VStack(spacing: 4) {
-                                    Text("\(followingCount)")
+                                    Text("\(viewModel.followingCount)")
                                         .font(.title2.bold())
                                     Text("Following")
                                         .font(.caption)
@@ -71,7 +46,7 @@ struct MyProfileView: View {
                         .padding(.vertical, 8)
                     }
 
-                    if ratedSongs.isEmpty {
+                    if viewModel.ratedSongs.isEmpty {
                         Section {
                             VStack(spacing: 12) {
                                 Text("No ratings yet")
@@ -87,7 +62,7 @@ struct MyProfileView: View {
                         }
                     } else {
                         Section("Rated Songs") {
-                            ForEach(ratedSongs) { song in
+                            ForEach(viewModel.ratedSongs) { song in
                                 NavigationLink(value: TrackResult(
                                     id: song.trackId,
                                     name: song.trackName,
@@ -125,9 +100,9 @@ struct MyProfileView: View {
                             }
                         }
 
-                        if !ratedAlbums.isEmpty {
+                        if !viewModel.ratedAlbums.isEmpty {
                             Section("Rated Albums") {
-                                ForEach(ratedAlbums) { album in
+                                ForEach(viewModel.ratedAlbums) { album in
                                     HStack(spacing: 12) {
                                         SearchArtworkView(url: album.albumImageUrl, isCircle: false)
 
@@ -180,101 +155,7 @@ struct MyProfileView: View {
             }
         }
         .task {
-            await loadReviews()
-            await loadFollowCounts()
-        }
-    }
-
-    private func loadFollowCounts() async {
-        guard let uid = Auth.auth().currentUser?.uid else { return }
-        let db = Firestore.firestore()
-
-        do {
-            let followersSnapshot = try await db.collection("follows")
-                .whereField("followingId", isEqualTo: uid)
-                .getDocuments()
-            let followingSnapshot = try await db.collection("follows")
-                .whereField("followerId", isEqualTo: uid)
-                .getDocuments()
-
-            await MainActor.run {
-                followerCount = followersSnapshot.documents.count
-                followingCount = followingSnapshot.documents.count
-            }
-        } catch {
-            // Silently fail — counts stay at 0
-        }
-    }
-
-    private func loadReviews() async {
-        guard let uid = Auth.auth().currentUser?.uid else {
-            await MainActor.run { isLoading = false }
-            return
-        }
-
-        do {
-            let snapshot = try await Firestore.firestore()
-                .collection("reviews")
-                .whereField("userId", isEqualTo: uid)
-                .order(by: "updatedAt", descending: true)
-                .getDocuments()
-
-            var songs: [RatedSong] = []
-            // Group by albumName for album aggregation
-            var albumGroups: [String: (artistName: String, imageUrl: URL?, ratings: [Double])] = [:]
-
-            for doc in snapshot.documents {
-                let data = doc.data()
-                guard let trackId = data["trackId"] as? String,
-                      let trackName = data["trackName"] as? String,
-                      let rating = data["rating"] as? Double else { continue }
-
-                let artistName = data["artistName"] as? String ?? "Unknown Artist"
-                let albumName = data["albumName"] as? String ?? ""
-                let imageUrlString = data["albumImageUrl"] as? String ?? ""
-                let imageUrl = URL(string: imageUrlString)
-
-                songs.append(RatedSong(
-                    id: doc.documentID,
-                    trackId: trackId,
-                    trackName: trackName,
-                    artistName: artistName,
-                    albumName: albumName,
-                    albumImageUrl: imageUrl,
-                    rating: rating
-                ))
-
-                if !albumName.isEmpty {
-                    if var group = albumGroups[albumName] {
-                        group.ratings.append(rating)
-                        albumGroups[albumName] = group
-                    } else {
-                        albumGroups[albumName] = (artistName: artistName, imageUrl: imageUrl, ratings: [rating])
-                    }
-                }
-            }
-
-            // Build rated albums sorted by average rating descending
-            var albums: [RatedAlbum] = albumGroups.map { name, group in
-                let avg = group.ratings.reduce(0, +) / Double(group.ratings.count)
-                return RatedAlbum(
-                    id: name,
-                    albumName: name,
-                    artistName: group.artistName,
-                    albumImageUrl: group.imageUrl,
-                    averageRating: avg,
-                    ratedCount: group.ratings.count
-                )
-            }
-            albums.sort { $0.averageRating > $1.averageRating }
-
-            await MainActor.run {
-                ratedSongs = songs
-                ratedAlbums = albums
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run { isLoading = false }
+            await viewModel.load()
         }
     }
 }
