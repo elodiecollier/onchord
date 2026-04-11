@@ -13,21 +13,7 @@ struct ContentView: View {
     var body: some View {
         VStack {
             if authManager.isSignedIn {
-                TabView {
-                    NavigationStack {
-                        SearchView()
-                    }
-                    .tabItem {
-                        Label("Search", systemImage: "magnifyingglass")
-                    }
-
-                    NavigationStack {
-                        MyProfileView()
-                    }
-                    .tabItem {
-                        Label("My Profile", systemImage: "person.circle")
-                    }
-                }
+                TabBarView()
             } else {
                 VStack(spacing: 20) {
                     Text("Welcome to Onchord")
