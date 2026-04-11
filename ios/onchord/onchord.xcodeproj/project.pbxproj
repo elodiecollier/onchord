@@ -16,9 +16,22 @@
 		FD3E31DC2F46714500A5687B /* onchord.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = onchord.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		FDEF873E2F8AD3EC00F5CF86 /* Exceptions for "onchord" folder in "onchord" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = FD3E31DB2F46714500A5687B /* onchord */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FD3E31DE2F46714500A5687B /* onchord */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				FDEF873E2F8AD3EC00F5CF86 /* Exceptions for "onchord" folder in "onchord" target */,
+			);
 			path = onchord;
 			sourceTree = "<group>";
 		};
@@ -269,6 +282,7 @@
 				DEVELOPMENT_TEAM = 4TGHCLGHSW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = onchord/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -301,6 +315,7 @@
 				DEVELOPMENT_TEAM = 4TGHCLGHSW;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = onchord/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

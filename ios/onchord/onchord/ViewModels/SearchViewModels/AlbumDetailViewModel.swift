@@ -76,6 +76,7 @@ final class AlbumDetailViewModel {
 
             let tracksObj = json["tracks"] as? [String: Any]
             let trackItems = tracksObj?["items"] as? [[String: Any]] ?? []
+            let albumTrackCount = tracksObj?["total"] as? Int ?? trackItems.count
             let albumImageUrl = largeUrl ?? album.imageUrl
 
             let parsed: [TrackResult] = trackItems.compactMap { item in
@@ -85,7 +86,8 @@ final class AlbumDetailViewModel {
                 let artistName = artists.compactMap { $0["name"] as? String }.joined(separator: ", ")
                 return TrackResult(
                     id: id, name: name, artistName: artistName.isEmpty ? "Unknown Artist" : artistName,
-                    albumName: album.name, imageUrl: albumImageUrl
+                    albumName: album.name, imageUrl: albumImageUrl,
+                    albumTrackCount: albumTrackCount
                 )
             }
 
