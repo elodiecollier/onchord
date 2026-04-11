@@ -107,6 +107,7 @@ struct FirestoreService {
             "artistName": track.artistName,
             "albumName": track.albumName,
             "albumImageUrl": track.imageUrl?.absoluteString ?? "",
+            "albumTrackCount": track.albumTrackCount,
             "rating": value,
             "updatedAt": FieldValue.serverTimestamp()
         ]
@@ -131,7 +132,7 @@ struct FirestoreService {
             .getDocuments()
 
         var songs: [RatedSong] = []
-        var albumGroups: [String: (artistName: String, imageUrl: URL?, ratings: [Double])] = [:]
+        var albumGroups: [String: (artistName: String, imageUrl: URL?, ratings: [Double], totalTrackCount: Int)] = [:]
 
         for doc in snapshot.documents {
             let data = doc.data()
@@ -143,6 +144,7 @@ struct FirestoreService {
             let albumName = data["albumName"] as? String ?? ""
             let imageUrlString = data["albumImageUrl"] as? String ?? ""
             let imageUrl = URL(string: imageUrlString)
+            let albumTrackCount = data["albumTrackCount"] as? Int ?? 0
 
             songs.append(RatedSong(
                 id: doc.documentID,
@@ -159,12 +161,14 @@ struct FirestoreService {
                     group.ratings.append(rating)
                     albumGroups[albumName] = group
                 } else {
-                    albumGroups[albumName] = (artistName: artistName, imageUrl: imageUrl, ratings: [rating])
+                    albumGroups[albumName] = (artistName: artistName, imageUrl: imageUrl, ratings: [rating], totalTrackCount: albumTrackCount)
                 }
             }
         }
 
-        var albums: [RatedAlbum] = albumGroups.map { name, group in
+        var albums: [RatedAlbum] = albumGroups.compactMap { name, group in
+            guard group.totalTrackCount > 0,
+                  group.ratings.count == group.totalTrackCount else { return nil }
             let avg = group.ratings.reduce(0, +) / Double(group.ratings.count)
             return RatedAlbum(
                 id: name,

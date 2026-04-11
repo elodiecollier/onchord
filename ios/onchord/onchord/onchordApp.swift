@@ -10,6 +10,8 @@ import FirebaseCore
 
 @main
 struct onchordApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     init() {
             FirebaseApp.configure()
         }

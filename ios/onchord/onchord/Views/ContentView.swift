@@ -11,7 +11,7 @@ struct ContentView: View {
     @StateObject private var authManager = AuthManager()
 
     var body: some View {
-        VStack {
+        Group {
             if authManager.isSignedIn {
                 TabBarView()
             } else {
@@ -37,9 +37,9 @@ struct ContentView: View {
                             .padding(.horizontal)
                     }
                 }
+                .padding()
             }
         }
-        .padding()
         .environmentObject(authManager)
     }
 }
