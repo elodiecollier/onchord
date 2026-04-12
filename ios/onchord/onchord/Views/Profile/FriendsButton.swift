@@ -24,6 +24,6 @@ struct FriendsButton: View {
                 .foregroundStyle(Color("blueLight"))
         }
         .padding()
-        .background(Color("blueDark").cornerRadius(20).opacity(0.5))
+        .background(Color("blueDark").cornerRadius(20).opacity(0.2))
     }
 }
