@@ -9,6 +9,7 @@ import SwiftUI
 
 struct UserProfileView: View {
     @State private var viewModel: UserProfileViewModel
+    @State private var showUnfriendAlert = false
     @Environment(\.dismiss) private var dismiss
 
     init(user: UserResult) {
@@ -27,24 +28,7 @@ struct UserProfileView: View {
                         if viewModel.isLoading {
                             ProgressView()
                         } else {
-                            Button(action: {
-                                Task { await viewModel.toggleFollow() }
-                            }) {
-                                HStack {
-                                    Text(viewModel.isFollowing ? "FOLLOWING" : "FOLLOW")
-                                        .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
-                                    Image(systemName: viewModel.isFollowing ? "minus" : "plus")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: geo.size.width * 0.035)
-                                }
-                                .foregroundStyle(viewModel.isFollowing ? Color("greenLight") : Color("blueLight"))
-                                    .padding()
-                                    .background((viewModel.isFollowing ? Color("greenDark") : Color("blueDark")).cornerRadius(20).opacity(0.2))
-                                
-                            }
-                            .disabled(viewModel.isToggling)
-                            .opacity(viewModel.isToggling ? 0.6 : 1.0)
+                            friendshipButton(geo: geo)
                         }
                     }
                     .padding(geo.size.width * 0.01)
@@ -57,7 +41,10 @@ struct UserProfileView: View {
                             songCount: viewModel.ratedSongs.count,
                             albumCount: viewModel.ratedAlbums.count,
                             displayName: viewModel.user.displayName,
-                            profileImageUrl: viewModel.user.profileImageUrl
+                            profileImageUrl: viewModel.user.profileImageUrl,
+                            friendCount: viewModel.friendCount,
+                            userId: viewModel.user.id,
+                            isLoading: viewModel.isLoadingActivity
                         )
                         .padding(.horizontal)
                         ScrollableRatedSongsView(songs: viewModel.ratedSongs, geo: geo)
@@ -75,6 +62,102 @@ struct UserProfileView: View {
             }
             .ignoresSafeArea()
             .navigationBarBackButtonHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private func friendshipButton(geo: GeometryProxy) -> some View {
+        switch viewModel.friendshipStatus {
+        case .notFriends:
+            Button(action: { Task { await viewModel.sendFriendRequest() } }) {
+                HStack {
+                    Text("ADD FRIEND")
+                        .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
+                    Image(systemName: "person.badge.plus")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geo.size.width * 0.04)
+                }
+                .foregroundStyle(Color("blueLight"))
+                .padding()
+                .background(Color("blueDark").cornerRadius(20).opacity(0.2))
+            }
+            .disabled(viewModel.isToggling)
+            .opacity(viewModel.isToggling ? 0.6 : 1.0)
+
+        case .requestSent:
+            Button(action: { Task { await viewModel.cancelFriendRequest() } }) {
+                HStack {
+                    Text("REQUESTED")
+                        .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
+                    Image(systemName: "clock")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geo.size.width * 0.035)
+                }
+                .foregroundStyle(Color.gray)
+                .padding()
+                .background(Color.gray.cornerRadius(20).opacity(0.2))
+            }
+            .disabled(viewModel.isToggling)
+            .opacity(viewModel.isToggling ? 0.6 : 1.0)
+
+        case .requestReceived:
+            HStack(spacing: 8) {
+                Button(action: { Task { await viewModel.acceptFriendRequest() } }) {
+                    HStack {
+                        Text("ACCEPT")
+                            .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
+                        Image(systemName: "checkmark")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: geo.size.width * 0.035)
+                    }
+                    .foregroundStyle(Color("greenLight"))
+                    .padding()
+                    .background(Color("greenDark").cornerRadius(20).opacity(0.2))
+                }
+                Button(action: { Task { await viewModel.denyFriendRequest() } }) {
+                    HStack {
+                        Text("DENY")
+                            .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
+                        Image(systemName: "xmark")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: geo.size.width * 0.035)
+                    }
+                    .foregroundStyle(Color.red)
+                    .padding()
+                    .background(Color.red.cornerRadius(20).opacity(0.2))
+                }
+            }
+            .disabled(viewModel.isToggling)
+            .opacity(viewModel.isToggling ? 0.6 : 1.0)
+
+        case .friends:
+            Button(action: { showUnfriendAlert = true }) {
+                HStack {
+                    Text("FRIENDS")
+                        .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.035))
+                    Image(systemName: "checkmark")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geo.size.width * 0.035)
+                }
+                .foregroundStyle(Color("greenLight"))
+                .padding()
+                .background(Color("greenDark").cornerRadius(20).opacity(0.2))
+            }
+            .disabled(viewModel.isToggling)
+            .opacity(viewModel.isToggling ? 0.6 : 1.0)
+            .alert("Remove Friend", isPresented: $showUnfriendAlert) {
+                Button("Cancel", role: .cancel) {}
+                Button("Remove Friend", role: .destructive) {
+                    Task { await viewModel.unfriend() }
+                }
+            } message: {
+                Text("Are you sure you want to remove \(viewModel.user.displayName) as a friend?")
+            }
         }
     }
 }
