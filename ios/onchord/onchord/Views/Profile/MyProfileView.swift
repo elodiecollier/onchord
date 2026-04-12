@@ -21,7 +21,7 @@ struct MyProfileView: View {
                         .padding(.top, geo.size.height * 0.05)
                         .padding()
                     ScrollView {
-                        ProfileInfoView(geo: geo, songCount: viewModel.ratedSongs.count, albumCount: viewModel.ratedAlbums.count)
+                        ProfileInfoView(geo: geo, songCount: viewModel.ratedSongs.count, albumCount: viewModel.ratedAlbums.count, displayName: authManager.user?.displayName ?? "", profileImageUrl: nil)
                             .padding(.horizontal)
                         ScrollableRatedSongsView(songs: viewModel.ratedSongs, geo: geo)
                             .padding()

@@ -24,16 +24,23 @@ struct ScrollableRatedAlbumView: View {
                     .padding()
                 Spacer()
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(recentAlbums) { album in
-                        AlbumCardView(album: album, geo: geo)
+            if (recentAlbums.isEmpty) {
+                Text("No songs rated yet")
+                    .font(.custom("OpenSans-Regular", size: geo.size.width * 0.03))
+                    .foregroundStyle(Color("blueLight").opacity(0.5))
+                    .padding(.bottom)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 12) {
+                        ForEach(recentAlbums) { album in
+                            AlbumCardView(album: album, geo: geo)
+                        }
                     }
+                    .padding(geo.size.width * 0.01)
                 }
-                .padding(geo.size.width * 0.01)
+                .padding(.horizontal)
+                .padding(.bottom)
             }
-            .padding(.horizontal)
-            .padding(.bottom)
         }
         .background(Color("backgroundColorAccent").cornerRadius(20).opacity(0.5))
     }
