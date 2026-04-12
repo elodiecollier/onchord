@@ -12,68 +12,100 @@ struct FirestoreService {
 
     private let db = Firestore.firestore()
 
-    func isFollowing(docId: String) async throws -> Bool {
-        let doc = try await db.collection("follows").document(docId).getDocument()
-        return doc.exists
+    // MARK: - Friend Requests & Friendships
+
+    func getFriendshipStatus(currentUid: String, otherUid: String) async throws -> FriendshipStatus {
+        let friendshipId = [currentUid, otherUid].sorted().joined(separator: "_")
+        let friendshipDoc = try await db.collection("friendships").document(friendshipId).getDocument()
+        if friendshipDoc.exists { return .friends }
+
+        let sentDoc = try await db.collection("friendRequests").document("\(currentUid)_\(otherUid)").getDocument()
+        if sentDoc.exists { return .requestSent }
+
+        let receivedDoc = try await db.collection("friendRequests").document("\(otherUid)_\(currentUid)").getDocument()
+        if receivedDoc.exists { return .requestReceived }
+
+        return .notFriends
     }
 
-    func follow(docId: String, followerId: String, followingId: String) async throws {
+    func sendFriendRequest(fromId: String, toId: String) async throws {
         let data: [String: Any] = [
-            "followerId": followerId,
-            "followingId": followingId,
+            "fromId": fromId,
+            "toId": toId,
             "createdAt": FieldValue.serverTimestamp()
         ]
-        try await db.collection("follows").document(docId).setData(data)
+        try await db.collection("friendRequests").document("\(fromId)_\(toId)").setData(data)
     }
 
-    func unfollow(docId: String) async throws {
-        try await db.collection("follows").document(docId).delete()
+    func cancelFriendRequest(fromId: String, toId: String) async throws {
+        try await db.collection("friendRequests").document("\(fromId)_\(toId)").delete()
     }
 
-    func fetchFollowCounts(userId: String) async throws -> (followers: Int, following: Int) {
-        let followersSnapshot = try await db.collection("follows")
-            .whereField("followingId", isEqualTo: userId)
+    func acceptFriendRequest(fromId: String, toId: String) async throws {
+        let friendshipId = [fromId, toId].sorted().joined(separator: "_")
+        let data: [String: Any] = [
+            "userIds": [fromId, toId],
+            "createdAt": FieldValue.serverTimestamp()
+        ]
+        try await db.collection("friendships").document(friendshipId).setData(data)
+        try await db.collection("friendRequests").document("\(fromId)_\(toId)").delete()
+    }
+
+    func denyFriendRequest(fromId: String, toId: String) async throws {
+        try await db.collection("friendRequests").document("\(fromId)_\(toId)").delete()
+    }
+
+    func unfriend(currentUid: String, otherUid: String) async throws {
+        let friendshipId = [currentUid, otherUid].sorted().joined(separator: "_")
+        try await db.collection("friendships").document(friendshipId).delete()
+    }
+
+    func fetchFriendCount(userId: String) async throws -> Int {
+        let snapshot = try await db.collection("friendships")
+            .whereField("userIds", arrayContains: userId)
             .getDocuments()
-        let followingSnapshot = try await db.collection("follows")
-            .whereField("followerId", isEqualTo: userId)
-            .getDocuments()
-        return (followersSnapshot.documents.count, followingSnapshot.documents.count)
+        return snapshot.documents.count
     }
 
-    func fetchFollowUsers(mode: FollowListMode) async throws -> [UserResult] {
-        let snapshot: QuerySnapshot
-        switch mode {
-        case .followers(let userId):
-            snapshot = try await db.collection("follows")
-                .whereField("followingId", isEqualTo: userId)
-                .getDocuments()
-        case .following(let userId):
-            snapshot = try await db.collection("follows")
-                .whereField("followerId", isEqualTo: userId)
-                .getDocuments()
-        }
-
-        let userIds: [String] = snapshot.documents.compactMap { doc in
-            let data = doc.data()
-            switch mode {
-            case .followers:
-                return data["followerId"] as? String
-            case .following:
-                return data["followingId"] as? String
-            }
-        }
+    func fetchFriends(userId: String) async throws -> [UserResult] {
+        let snapshot = try await db.collection("friendships")
+            .whereField("userIds", arrayContains: userId)
+            .getDocuments()
 
         var results: [UserResult] = []
-        for uid in userIds {
-            let userDoc = try await db.collection("users").document(uid).getDocument()
-            guard let data = userDoc.data() else { continue }
-            let displayName = data["displayName"] as? String ?? "Unknown"
-            let profileImageUrl = (data["profileImageUrl"] as? String).flatMap { URL(string: $0) }
-            results.append(UserResult(id: uid, displayName: displayName, profileImageUrl: profileImageUrl))
+        for doc in snapshot.documents {
+            let data = doc.data()
+            guard let userIds = data["userIds"] as? [String] else { continue }
+            let otherUid = userIds.first(where: { $0 != userId }) ?? ""
+            guard !otherUid.isEmpty else { continue }
+            let userDoc = try await db.collection("users").document(otherUid).getDocument()
+            guard let userData = userDoc.data() else { continue }
+            let displayName = userData["displayName"] as? String ?? "Unknown"
+            let profileImageUrl = (userData["profileImageUrl"] as? String).flatMap { URL(string: $0) }
+            results.append(UserResult(id: otherUid, displayName: displayName, profileImageUrl: profileImageUrl))
         }
-
         return results
     }
+
+    func fetchIncomingFriendRequests(userId: String) async throws -> [UserResult] {
+        let snapshot = try await db.collection("friendRequests")
+            .whereField("toId", isEqualTo: userId)
+            .getDocuments()
+
+        var results: [UserResult] = []
+        for doc in snapshot.documents {
+            let data = doc.data()
+            guard let fromId = data["fromId"] as? String else { continue }
+            let userDoc = try await db.collection("users").document(fromId).getDocument()
+            guard let userData = userDoc.data() else { continue }
+            let displayName = userData["displayName"] as? String ?? "Unknown"
+            let profileImageUrl = (userData["profileImageUrl"] as? String).flatMap { URL(string: $0) }
+            results.append(UserResult(id: fromId, displayName: displayName, profileImageUrl: profileImageUrl))
+        }
+        return results
+    }
+
+    // MARK: - Users
 
     func searchUsers(query: String, excludingUid: String) async throws -> [UserResult] {
         let lowered = query.lowercased()
@@ -92,6 +124,8 @@ struct FirestoreService {
             return UserResult(id: uid, displayName: displayName, profileImageUrl: profileImageUrl)
         }
     }
+
+    // MARK: - Reviews
 
     func loadRating(docId: String) async throws -> Double? {
         let doc = try await db.collection("reviews").document(docId).getDocument()

@@ -13,6 +13,9 @@ struct ProfileInfoView: View {
     let albumCount: Int
     let displayName: String
     let profileImageUrl: URL?
+    let friendCount: Int
+    let userId: String
+    let isLoading: Bool
 
     var body: some View {
         HStack {
@@ -51,13 +54,16 @@ struct ProfileInfoView: View {
                     .font(.custom("OpenSans-SemiBold", size: geo.size.width * 0.03))
                     .foregroundStyle(Color("greenLight"))
                 HStack {
-                    RatingCountDisplayView(ratingCountVal: songCount, ratingCountTitle: "Song Ratings", geo: geo)
+                    RatingCountDisplayView(ratingCountVal: isLoading ? "—" : "\(songCount)", ratingCountTitle: "Song Ratings", geo: geo)
                         .padding(.trailing, geo.size.width * 0.01)
-                    RatingCountDisplayView(ratingCountVal: albumCount, ratingCountTitle: "Album Ratings", geo: geo)
+                    RatingCountDisplayView(ratingCountVal: isLoading ? "—" : "\(albumCount)", ratingCountTitle: "Album Ratings", geo: geo)
                 }
                 .padding(.trailing, geo.size.width * 0.01)
-                FriendsButton(friendsCount: 10, geo: geo)
-                    .padding(.trailing, geo.size.width * 0.01)
+                NavigationLink(value: FriendsRoute(userId: userId)) {
+                    FriendsButton(friendsCount: friendCount, isLoading: isLoading, geo: geo)
+                        .padding(.trailing, geo.size.width * 0.01)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding()

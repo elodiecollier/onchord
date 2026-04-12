@@ -12,7 +12,8 @@ import FirebaseAuth
 final class UserProfileViewModel {
     let user: UserResult
 
-    private(set) var isFollowing = false
+    private(set) var friendshipStatus: FriendshipStatus = .notFriends
+    private(set) var friendCount: Int = 0
     private(set) var isLoading = true
     private(set) var isToggling = false
     private(set) var ratedSongs: [RatedSong] = []
@@ -25,59 +26,93 @@ final class UserProfileViewModel {
         Auth.auth().currentUser?.uid
     }
 
-    private var followDocId: String? {
-        guard let uid = currentUid else { return nil }
-        return "\(uid)_\(user.id)"
-    }
-
     init(user: UserResult) {
         self.user = user
     }
 
     func load() async {
-        await checkFollowStatus()
+        await checkFriendshipStatus()
+        await loadFriendCount()
         await loadUserActivity()
     }
 
-    func toggleFollow() async {
-        guard let uid = currentUid, let docId = followDocId else { return }
-
+    func sendFriendRequest() async {
+        guard let uid = currentUid else { return }
         await MainActor.run { isToggling = true }
-
         do {
-            if isFollowing {
-                try await firestoreService.unfollow(docId: docId)
-                await MainActor.run { isFollowing = false }
-            } else {
-                try await firestoreService.follow(
-                    docId: docId,
-                    followerId: uid,
-                    followingId: user.id
-                )
-                await MainActor.run { isFollowing = true }
-            }
-        } catch {
-            // Silently fail — button state stays unchanged
-        }
-
+            try await firestoreService.sendFriendRequest(fromId: uid, toId: user.id)
+            await MainActor.run { friendshipStatus = .requestSent }
+        } catch {}
         await MainActor.run { isToggling = false }
     }
 
-    private func checkFollowStatus() async {
-        guard let docId = followDocId else {
+    func cancelFriendRequest() async {
+        guard let uid = currentUid else { return }
+        await MainActor.run { isToggling = true }
+        do {
+            try await firestoreService.cancelFriendRequest(fromId: uid, toId: user.id)
+            await MainActor.run { friendshipStatus = .notFriends }
+        } catch {}
+        await MainActor.run { isToggling = false }
+    }
+
+    func acceptFriendRequest() async {
+        guard let uid = currentUid else { return }
+        await MainActor.run { isToggling = true }
+        do {
+            try await firestoreService.acceptFriendRequest(fromId: user.id, toId: uid)
+            await MainActor.run {
+                friendshipStatus = .friends
+                friendCount += 1
+            }
+        } catch {}
+        await MainActor.run { isToggling = false }
+    }
+
+    func denyFriendRequest() async {
+        guard let uid = currentUid else { return }
+        await MainActor.run { isToggling = true }
+        do {
+            try await firestoreService.denyFriendRequest(fromId: user.id, toId: uid)
+            await MainActor.run { friendshipStatus = .notFriends }
+        } catch {}
+        await MainActor.run { isToggling = false }
+    }
+
+    func unfriend() async {
+        guard let uid = currentUid else { return }
+        await MainActor.run { isToggling = true }
+        do {
+            try await firestoreService.unfriend(currentUid: uid, otherUid: user.id)
+            await MainActor.run {
+                friendshipStatus = .notFriends
+                friendCount = max(0, friendCount - 1)
+            }
+        } catch {}
+        await MainActor.run { isToggling = false }
+    }
+
+    private func checkFriendshipStatus() async {
+        guard let uid = currentUid else {
             await MainActor.run { isLoading = false }
             return
         }
-
         do {
-            let following = try await firestoreService.isFollowing(docId: docId)
+            let status = try await firestoreService.getFriendshipStatus(currentUid: uid, otherUid: user.id)
             await MainActor.run {
-                isFollowing = following
+                friendshipStatus = status
                 isLoading = false
             }
         } catch {
             await MainActor.run { isLoading = false }
         }
+    }
+
+    private func loadFriendCount() async {
+        do {
+            let count = try await firestoreService.fetchFriendCount(userId: user.id)
+            await MainActor.run { friendCount = count }
+        } catch {}
     }
 
     private func loadUserActivity() async {

@@ -9,27 +9,22 @@ import Foundation
 
 @Observable
 final class FollowListViewModel {
-    let mode: FollowListMode
+    let userId: String
 
     private(set) var users: [UserResult] = []
     private(set) var isLoading = true
 
-    var title: String {
-        switch mode {
-        case .followers: return "Followers"
-        case .following: return "Following"
-        }
-    }
+    let title = "Friends"
 
     private let firestoreService = FirestoreService()
 
-    init(mode: FollowListMode) {
-        self.mode = mode
+    init(userId: String) {
+        self.userId = userId
     }
 
     func load() async {
         do {
-            let results = try await firestoreService.fetchFollowUsers(mode: mode)
+            let results = try await firestoreService.fetchFriends(userId: userId)
             await MainActor.run {
                 users = results
                 isLoading = false
