@@ -14,6 +14,9 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
+        ZStack {
+            GradientBackgroundMain()
+                .ignoresSafeArea()
         ScrollView {
             VStack(spacing: 20) {
                 // Album artwork
@@ -60,7 +63,7 @@ struct AlbumDetailView: View {
                 if let avg = viewModel.averageRating {
                     HStack(spacing: 4) {
                         Image(systemName: "star.fill")
-                            .foregroundColor(.yellow)
+                            .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                         Text(String(format: "%.1f", avg))
                             .font(.headline)
                         Text("average")
@@ -106,7 +109,7 @@ struct AlbumDetailView: View {
                                         HStack(spacing: 2) {
                                             Image(systemName: "star.fill")
                                                 .font(.caption2)
-                                                .foregroundColor(.yellow)
+                                                .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                                             Text(r == r.rounded() ? "\(Int(r))" : String(format: "%.1f", r))
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
@@ -130,5 +133,6 @@ struct AlbumDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }
         .onAppear { Task { await viewModel.refreshRatings() } }
+        } // ZStack
     }
 }

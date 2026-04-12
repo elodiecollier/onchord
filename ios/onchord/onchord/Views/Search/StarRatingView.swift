@@ -15,7 +15,7 @@ struct StarRatingView: View {
             ForEach(1...5, id: \.self) { star in
                 Image(systemName: starImage(for: star))
                     .font(.system(size: 36))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                     .onTapGesture {
                         let full = Double(star)
                         let half = full - 0.5
