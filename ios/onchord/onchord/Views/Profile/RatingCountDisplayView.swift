@@ -8,13 +8,13 @@
 import SwiftUI
 
 struct RatingCountDisplayView: View {
-    let ratingCountVal: Int
+    let ratingCountVal: String
     let ratingCountTitle: String
     let geo: GeometryProxy
-    
+
     var body: some View {
         VStack {
-            Text("\(ratingCountVal)")
+            Text(ratingCountVal)
                 .font(.custom("OpenSans-Bold", size: geo.size.width * 0.04))
                 .bold()
                 .foregroundStyle(Color("backgroundColorAccent"))

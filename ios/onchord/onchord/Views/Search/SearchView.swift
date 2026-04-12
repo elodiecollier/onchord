@@ -187,6 +187,9 @@ struct SearchView: View {
         }
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(for: FriendsRoute.self) { route in
+            FollowListView(userId: route.userId)
+        }
         .onAppear { viewModel.loadHistory() }
         .onChange(of: viewModel.query) { _, newValue in
             viewModel.onQueryChanged(newValue)

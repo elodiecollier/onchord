@@ -13,8 +13,7 @@ final class MyProfileViewModel {
     private(set) var ratedSongs: [RatedSong] = []
     private(set) var ratedAlbums: [RatedAlbum] = []
     private(set) var isLoading = true
-    private(set) var followerCount: Int = 0
-    private(set) var followingCount: Int = 0
+    private(set) var friendCount: Int = 0
 
     var currentUid: String? {
         Auth.auth().currentUser?.uid
@@ -24,7 +23,7 @@ final class MyProfileViewModel {
 
     func load() async {
         await loadReviews()
-        await loadFollowCounts()
+        await loadFriendCount()
     }
 
     private func loadReviews() async {
@@ -45,17 +44,11 @@ final class MyProfileViewModel {
         }
     }
 
-    private func loadFollowCounts() async {
+    private func loadFriendCount() async {
         guard let uid = currentUid else { return }
-
         do {
-            let counts = try await firestoreService.fetchFollowCounts(userId: uid)
-            await MainActor.run {
-                followerCount = counts.followers
-                followingCount = counts.following
-            }
-        } catch {
-            // Silently fail — counts stay at 0
-        }
+            let count = try await firestoreService.fetchFriendCount(userId: uid)
+            await MainActor.run { friendCount = count }
+        } catch {}
     }
 }

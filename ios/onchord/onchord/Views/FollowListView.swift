@@ -9,8 +9,9 @@ import SwiftUI
 
 struct FollowListView: View {
     @State private var viewModel: FollowListViewModel
-    init(mode: FollowListMode) {
-        _viewModel = State(initialValue: FollowListViewModel(mode: mode))
+
+    init(userId: String) {
+        _viewModel = State(initialValue: FollowListViewModel(userId: userId))
     }
 
     var body: some View {
@@ -18,7 +19,7 @@ struct FollowListView: View {
             if viewModel.isLoading {
                 ProgressView()
             } else if viewModel.users.isEmpty {
-                Text("No \(viewModel.title.lowercased()) yet")
+                Text("No friends yet")
                     .foregroundColor(.secondary)
             } else {
                 List(viewModel.users) { user in
