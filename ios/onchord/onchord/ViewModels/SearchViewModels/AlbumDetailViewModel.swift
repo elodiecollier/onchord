@@ -86,7 +86,9 @@ final class AlbumDetailViewModel {
                 let artistName = artists.compactMap { $0["name"] as? String }.joined(separator: ", ")
                 return TrackResult(
                     id: id, name: name, artistName: artistName.isEmpty ? "Unknown Artist" : artistName,
-                    albumName: album.name, imageUrl: albumImageUrl,
+                    albumName: album.name, albumId: album.id,
+                    albumType: album.albumType, imageUrl: albumImageUrl,
+                    largeImageUrl: nil,
                     albumTrackCount: albumTrackCount
                 )
             }

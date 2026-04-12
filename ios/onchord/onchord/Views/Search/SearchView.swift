@@ -14,6 +14,9 @@ struct SearchView: View {
     @State private var viewModel = SearchViewModel()
 
     var body: some View {
+        ZStack {
+            GradientBackgroundMain()
+                .ignoresSafeArea()
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
@@ -67,6 +70,7 @@ struct SearchView: View {
                                     Spacer()
                                 }
                             }
+                            .listRowBackground(Color.clear)
                         }
                     } header: {
                         HStack {
@@ -81,6 +85,7 @@ struct SearchView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             } else if viewModel.searchMode == .people {
                 if viewModel.hasSearched && viewModel.userResults.isEmpty {
                     Spacer()
@@ -97,8 +102,10 @@ struct SearchView: View {
                                     .lineLimit(1)
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                     .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                     .navigationDestination(for: UserResult.self) { user in
                         UserProfileView(user: user)
                     }
@@ -127,6 +134,7 @@ struct SearchView: View {
                                 }
                             }
                         }
+                        .listRowBackground(Color.clear)
 
                     case .album(let id, let name, let artistName, let albumType, let imageUrl):
                         NavigationLink(value: AlbumResult(id: id, name: name, artistName: artistName, albumType: albumType, imageUrl: imageUrl)) {
@@ -153,6 +161,7 @@ struct SearchView: View {
                                 }
                             }
                         }
+                        .listRowBackground(Color.clear)
 
                     case .track(let track):
                         NavigationLink(value: track) {
@@ -169,9 +178,11 @@ struct SearchView: View {
                                 }
                             }
                         }
+                        .listRowBackground(Color.clear)
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .navigationDestination(for: TrackResult.self) { track in
                     SongDetailView(track: track)
                 }
@@ -185,6 +196,7 @@ struct SearchView: View {
                 Spacer()
             }
         }
+        } // ZStack
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: FriendsRoute.self) { route in

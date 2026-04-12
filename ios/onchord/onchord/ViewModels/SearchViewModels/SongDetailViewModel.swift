@@ -14,6 +14,7 @@ final class SongDetailViewModel {
 
     var rating: Double = 0
     private(set) var isSaving = false
+    private(set) var friendRatings: [FriendTrackRating] = []
 
     var formattedRating: String {
         if rating == rating.rounded() {
@@ -34,9 +35,14 @@ final class SongDetailViewModel {
     }
 
     func loadRating() async {
-        guard let docId = reviewDocId else { return }
-        if let saved = try? await firestoreService.loadRating(docId: docId) {
-            await MainActor.run { rating = saved }
+        guard let uid = Auth.auth().currentUser?.uid,
+              let docId = reviewDocId else { return }
+        async let savedRating = firestoreService.loadRating(docId: docId)
+        async let friendRatingsResult = firestoreService.fetchFriendRatingsForTrack(trackId: track.id, currentUserId: uid)
+        let (rating, friends) = await (try? savedRating, try? friendRatingsResult)
+        await MainActor.run {
+            if let rating { self.rating = rating }
+            self.friendRatings = friends ?? []
         }
     }
 
