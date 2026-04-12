@@ -566,26 +566,48 @@ export const spotifyArtistAlbums = onRequest(async (req, res) => {
       return;
     }
 
+    // Only append offset/limit when non-default. Spotify returns 400
+    // "Invalid limit" when offset=0 is sent explicitly alongside limit.
+    const reqOffset =
+      typeof body["offset"] === "number" ?
+        (body["offset"] as number) : 0;
+    const reqLimit =
+      typeof body["limit"] === "number" ?
+        Math.min(body["limit"] as number, 50) : null;
+
     const accessToken = await getSpotifyAccessToken(uid);
 
-    // Fetch artist profile and albums in parallel
-    const albumsUrl = new URL(
-      `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}/albums`
-    );
-    albumsUrl.searchParams.set("include_groups", "album,single,compilation");
+    const base =
+      `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`;
+    let albumsUrl =
+      `${base}/albums?include_groups=album,single,compilation`;
+    if (reqOffset > 0) albumsUrl += `&offset=${reqOffset}`;
+    if (reqLimit !== null) albumsUrl += `&limit=${reqLimit}`;
 
     const [artistResp, albumsResp] = await Promise.all([
       fetch(
-        `https://api.spotify.com/v1/artists/${encodeURIComponent(artistId)}`,
+        `${base}`,
         {headers: {Authorization: `Bearer ${accessToken}`}}
       ),
-      fetch(albumsUrl.toString(), {
+      fetch(albumsUrl, {
         headers: {Authorization: `Bearer ${accessToken}`},
       }),
     ]);
 
-    const artistJson = await artistResp.json();
-    const albumsJson = await albumsResp.json();
+    const artistText = await artistResp.text();
+    const albumsText = await albumsResp.text();
+
+    // Spotify may return plain text (e.g. "Too many requests") on errors,
+    // so parse safely rather than calling .json() directly.
+    const safeJson = (text: string): unknown => {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return {error: text};
+      }
+    };
+    const artistJson = safeJson(artistText);
+    const albumsJson = safeJson(albumsText);
 
     if (!artistResp.ok) {
       logger.error("Spotify artist fetch failed", {
@@ -601,13 +623,13 @@ export const spotifyArtistAlbums = onRequest(async (req, res) => {
 
     if (!albumsResp.ok) {
       logger.error("Spotify albums fetch failed", {
-        url: albumsUrl.toString(),
+        url: albumsUrl,
         status: albumsResp.status,
         body: albumsJson,
       });
       res.status(albumsResp.status).json({
         source: "albums",
-        url: albumsUrl.toString(),
+        url: albumsUrl,
         spotifyError: albumsJson,
       });
       return;
