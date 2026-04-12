@@ -25,8 +25,8 @@ struct MyProfileView: View {
                             geo: geo,
                             songCount: viewModel.ratedSongs.count,
                             albumCount: viewModel.ratedAlbums.count,
-                            displayName: authManager.user?.displayName ?? "",
-                            profileImageUrl: nil,
+                            displayName: viewModel.displayName,
+                            profileImageUrl: viewModel.profileImageUrl,
                             friendCount: viewModel.friendCount,
                             userId: viewModel.currentUid ?? "",
                             isLoading: viewModel.isLoading
