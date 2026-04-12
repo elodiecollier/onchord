@@ -11,28 +11,40 @@ struct ProfileInfoView: View {
     let geo: GeometryProxy
     let songCount: Int
     let albumCount: Int
+    let displayName: String
+    let profileImageUrl: URL?
 
     var body: some View {
         HStack {
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: geo.size.width * 0.28)
-                .foregroundStyle(.white)
-                .padding(geo.size.width * 0.01)
-                .background {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color("greenLight"), Color("blueLight")],
-                                startPoint: .bottom,
-                                endPoint: .top
-                            )
-                        )
+            AsyncImage(url: profileImageUrl) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                default:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundStyle(.white)
                 }
+            }
+            .frame(width: geo.size.width * 0.28, height: geo.size.width * 0.28)
+            .clipShape(Circle())
+            .padding(geo.size.width * 0.01)
+            .background {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color("greenLight"), Color("blueLight")],
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+            }
             VStack {
                 HStack {
-                    Text("Elodie Collier")
+                    Text(displayName)
                         .padding(.trailing, geo.size.width * 0.01)
                     Spacer()
                 }
