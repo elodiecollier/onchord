@@ -15,29 +15,7 @@ struct ContentView: View {
             if authManager.isSignedIn {
                 TabBarView()
             } else {
-                VStack(spacing: 20) {
-                    Text("Welcome to Onchord")
-                        .font(.title)
-
-                    if authManager.isLoading {
-                        ProgressView("Signing in...")
-                    } else {
-                        Button("Sign in with Spotify") {
-                            authManager.login()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                    }
-
-                    if let error = authManager.errorMessage {
-                        Text(error)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                }
-                .padding()
+                SignInView()
             }
         }
         .environmentObject(authManager)
