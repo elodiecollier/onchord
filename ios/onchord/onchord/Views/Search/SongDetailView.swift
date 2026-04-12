@@ -167,7 +167,7 @@ struct SongDetailView: View {
                                                 .font(.custom("OpenSans-Bold", size: geo.size.width * 0.04))
                                                 .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                                             Image(systemName: "star.fill")
-                                                .font(.system(size: geo.size.width * 0.035))
+                                                .font(.system(size: geo.size.width * 0.04))
                                                 .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                                         }
                                     }
