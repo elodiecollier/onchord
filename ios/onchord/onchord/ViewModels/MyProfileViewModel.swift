@@ -7,6 +7,7 @@
 
 import Foundation
 import FirebaseAuth
+import FirebaseFirestore
 
 @Observable
 final class MyProfileViewModel {
@@ -14,6 +15,8 @@ final class MyProfileViewModel {
     private(set) var ratedAlbums: [RatedAlbum] = []
     private(set) var isLoading = true
     private(set) var friendCount: Int = 0
+    private(set) var profileImageUrl: URL?
+    private(set) var displayName: String = ""
 
     var currentUid: String? {
         Auth.auth().currentUser?.uid
@@ -24,6 +27,7 @@ final class MyProfileViewModel {
     func load() async {
         await loadReviews()
         await loadFriendCount()
+        await loadProfileImage()
     }
 
     private func loadReviews() async {
@@ -41,6 +45,18 @@ final class MyProfileViewModel {
             }
         } catch {
             await MainActor.run { isLoading = false }
+        }
+    }
+
+    private func loadProfileImage() async {
+        guard let uid = currentUid else { return }
+        let doc = try? await Firestore.firestore().collection("users").document(uid).getDocument()
+        let data = doc?.data()
+        let url = (data?["profileImageUrl"] as? String).flatMap { URL(string: $0) }
+        let name = data?["displayName"] as? String ?? ""
+        await MainActor.run {
+            profileImageUrl = url
+            displayName = name
         }
     }
 
