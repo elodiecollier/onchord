@@ -84,6 +84,10 @@ private struct AlbumCardView: View {
                 }
                 .frame(width: cardWidth, height: cardWidth)
                 .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cardCornerRadius)
+                        .stroke(Color("blueLight"), lineWidth: geo.size.width * 0.005)
+                }
 
                 HStack {
                     Text(ratingText)
@@ -91,7 +95,7 @@ private struct AlbumCardView: View {
                         .foregroundStyle(Color("blueLight"))
                     Image(systemName: "star.fill")
                         .font(.system(size: geo.size.width * 0.025))
-                        .foregroundColor(.yellow)
+                        .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                 }
                 .padding(.horizontal, badgePaddingH)
                 .padding(.vertical, badgePaddingV)

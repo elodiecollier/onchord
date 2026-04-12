@@ -45,6 +45,10 @@ struct SongCardView: View {
                 }
                 .frame(width: cardWidth, height: cardWidth)
                 .clipShape(RoundedRectangle(cornerRadius: cardCornerRadius))
+                .overlay {
+                    RoundedRectangle(cornerRadius: cardCornerRadius)
+                        .stroke(Color("greenLight"), lineWidth: geo.size.width * 0.005)
+                }
 
                 HStack {
                     Text(ratingText)
@@ -52,7 +56,7 @@ struct SongCardView: View {
                         .foregroundStyle(Color("greenLight"))
                     Image(systemName: "star.fill")
                         .font(.system(size: geo.size.width * 0.025))
-                        .foregroundColor(.yellow)
+                        .foregroundStyle(BlueGreenDiagonalGradient.gradient)
                 }
                 .padding(.horizontal, badgePaddingH)
                 .padding(.vertical, badgePaddingV)
