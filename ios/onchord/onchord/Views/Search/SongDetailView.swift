@@ -65,7 +65,7 @@ struct SongDetailView: View {
                         VStack(spacing: 0) {
                             Color.clear
                                 .frame(height: cardStart)
-                            Color("blueDark").opacity(0.2)
+                            Color("backgroundColorAccent").opacity(0.2)
                                 .clipShape(RoundedRectangle(cornerRadius: cardCorner))
                         }
 
@@ -126,7 +126,7 @@ struct SongDetailView: View {
                     .padding(.horizontal, hPad)
                     .padding(.vertical, geo.size.height * 0.02)
                     .frame(maxWidth: .infinity)
-                    .background(Color("blueDark").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
+                    .background(Color("backgroundColorAccent").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
                     .padding(.horizontal, hPad)
 
                     VStack(alignment: .leading, spacing: geo.size.height * 0.015) {
@@ -178,7 +178,7 @@ struct SongDetailView: View {
                     .padding(.horizontal, hPad)
                     .padding(.vertical, geo.size.height * 0.02)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color("blueDark").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
+                    .background(Color("backgroundColorAccent").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
                     .padding(.horizontal, hPad)
 
                     if !viewModel.track.albumName.isEmpty, let albumId = viewModel.track.albumId {
@@ -234,7 +234,7 @@ struct SongDetailView: View {
                         .padding(.horizontal, hPad)
                         .padding(.vertical, geo.size.height * 0.02)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color("blueDark").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
+                        .background(Color("backgroundColorAccent").opacity(0.2).clipShape(RoundedRectangle(cornerRadius: cardCorner)))
                         .padding(.horizontal, hPad)
                     }
 
