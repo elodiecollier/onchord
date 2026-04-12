@@ -12,6 +12,9 @@ struct TrackResult: Identifiable, Hashable {
     let name: String
     let artistName: String
     let albumName: String
+    let albumId: String?
+    let albumType: String
     let imageUrl: URL?
+    let largeImageUrl: URL?
     let albumTrackCount: Int
 }

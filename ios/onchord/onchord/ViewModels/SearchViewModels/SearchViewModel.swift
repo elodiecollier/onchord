@@ -253,10 +253,15 @@ final class SearchViewModel {
                 let artistName = allArtistNames(from: track)
                 let albumDict = track["album"] as? [String: Any]
                 let albumName = albumDict?["name"] as? String ?? ""
+                let albumId = albumDict?["id"] as? String
+                let albumType = albumDict?["album_type"] as? String ?? "album"
                 let imageUrl = albumDict.flatMap { firstImageUrl(from: $0) }
+                let largeImageUrl = albumDict.flatMap { firstImageUrl(from: $0, preferLarge: true) }
                 let albumTrackCount = albumDict?["total_tracks"] as? Int ?? 0
                 let tr = TrackResult(id: id, name: name, artistName: artistName,
-                                     albumName: albumName, imageUrl: imageUrl,
+                                     albumName: albumName, albumId: albumId,
+                                     albumType: albumType, imageUrl: imageUrl,
+                                     largeImageUrl: largeImageUrl,
                                      albumTrackCount: albumTrackCount)
                 scored.append((.track(tr), relevanceScore(name: name, query: q, index: i)))
             }

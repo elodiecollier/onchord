@@ -159,6 +159,23 @@ struct FirestoreService {
         return ratings
     }
 
+    func fetchFriendRatingsForTrack(trackId: String, currentUserId: String) async throws -> [FriendTrackRating] {
+        let friends = try await fetchFriends(userId: currentUserId)
+        var results: [FriendTrackRating] = []
+        for friend in friends {
+            let docId = "\(friend.id)_\(trackId)"
+            if let rating = try? await loadRating(docId: docId) {
+                results.append(FriendTrackRating(
+                    id: friend.id,
+                    displayName: friend.displayName,
+                    profileImageUrl: friend.profileImageUrl,
+                    rating: rating
+                ))
+            }
+        }
+        return results
+    }
+
     func fetchReviews(userId: String) async throws -> (songs: [RatedSong], albums: [RatedAlbum]) {
         let snapshot = try await db.collection("reviews")
             .whereField("userId", isEqualTo: userId)

@@ -15,6 +15,9 @@ struct ArtistDetailView: View {
     }
 
     var body: some View {
+        ZStack {
+            GradientBackgroundMain()
+                .ignoresSafeArea()
         ScrollView {
             VStack(spacing: 20) {
                 // Artist image
@@ -71,6 +74,7 @@ struct ArtistDetailView: View {
         .navigationTitle("Artist")
         .navigationBarTitleDisplayMode(.inline)
         .task { await viewModel.load() }
+        } // ZStack
     }
 
     @ViewBuilder
