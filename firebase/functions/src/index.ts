@@ -540,6 +540,110 @@ export const spotifyAlbumTracks = onRequest(async (req, res) => {
   }
 });
 
+export const recentlyPlayed = onRequest(async (req, res) => {
+  try {
+    if (req.method !== "POST") {
+      res.status(405).send("Method Not Allowed");
+      return;
+    }
+
+    const authHeader = req.header("Authorization") || "";
+    const match = authHeader.match(/^Bearer (.+)$/);
+    if (!match) {
+      res.status(401).json({error: "Missing Authorization Bearer token"});
+      return;
+    }
+
+    const idToken = match[1];
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const accessToken = await getSpotifyAccessToken(uid);
+
+    const recentResp = await fetch(
+      "https://api.spotify.com/v1/me/player/recently-played?limit=10",
+      {headers: {Authorization: `Bearer ${accessToken}`}}
+    );
+
+    type RecentItem = {
+      track: {
+        id: string;
+        name: string;
+        artists: Array<{ name: string }>;
+        album: {
+          id: string;
+          name: string;
+          album_type: string;
+          images: Array<{ url: string }>;
+          total_tracks: number;
+        };
+      };
+    };
+
+    const recentJson = await recentResp.json() as { items?: RecentItem[] };
+
+    if (!recentResp.ok) {
+      res.status(recentResp.status).json(recentJson);
+      return;
+    }
+
+    const items = recentJson.items ?? [];
+
+    // Deduplicate by track ID, preserving recency order
+    const seen = new Set<string>();
+    const uniqueTracks = items
+      .filter((item) => {
+        if (seen.has(item.track.id)) return false;
+        seen.add(item.track.id);
+        return true;
+      })
+      .map((item) => item.track);
+
+    if (uniqueTracks.length === 0) {
+      res.status(200).json({tracks: []});
+      return;
+    }
+
+    const trackIds = uniqueTracks.map((t) => t.id);
+
+    // Check which tracks this user has already rated (single Firestore query)
+    const snapshot = await admin.firestore()
+      .collection("reviews")
+      .where("userId", "==", uid)
+      .where("trackId", "in", trackIds)
+      .get();
+
+    const ratedIds = new Set(
+      snapshot.docs.map((d) => d.data().trackId as string)
+    );
+
+    const unratedTracks = uniqueTracks
+      .filter((t) => !ratedIds.has(t.id))
+      .map((t) => {
+        const images = t.album.images;
+        return {
+          id: t.id,
+          name: t.name,
+          artistName: t.artists.map((a) => a.name).join(", "),
+          albumName: t.album.name,
+          albumId: t.album.id,
+          albumType: t.album.album_type,
+          imageUrl: images[images.length - 1]?.url ?? null,
+          largeImageUrl: images[0]?.url ?? null,
+          albumTrackCount: t.album.total_tracks,
+        };
+      });
+
+    res.status(200).json({tracks: unratedTracks});
+  } catch (error: unknown) {
+    const err = error as {status?: number; message?: string; body?: unknown};
+    logger.error("recentlyPlayed error", error);
+    const code = err.status || 500;
+    const body = err.body || {error: err.message || "Internal server error"};
+    res.status(code).json(body);
+  }
+});
+
 export const spotifyArtistAlbums = onRequest(async (req, res) => {
   try {
     if (req.method !== "POST") {

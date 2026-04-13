@@ -26,7 +26,7 @@ final class SpotifyAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
         let challenge = Self.codeChallenge(from: verifier)
         self.codeVerifier = verifier
 
-        let scope = "user-read-email"
+        let scope = "user-read-email user-read-recently-played"
         var comps = URLComponents(string: "https://accounts.spotify.com/authorize")!
         comps.queryItems = [
             .init(name: "client_id", value: clientId),
