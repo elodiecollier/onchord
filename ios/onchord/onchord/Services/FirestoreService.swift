@@ -141,6 +141,7 @@ struct FirestoreService {
             "artistName": track.artistName,
             "albumName": track.albumName,
             "albumImageUrl": track.imageUrl?.absoluteString ?? "",
+            "albumLargeImageUrl": track.largeImageUrl?.absoluteString ?? "",
             "albumTrackCount": track.albumTrackCount,
             "rating": value,
             "updatedAt": FieldValue.serverTimestamp()
@@ -174,6 +175,48 @@ struct FirestoreService {
             }
         }
         return results
+    }
+
+    func fetchFriendActivity(userId: String, limit: Int = 20) async throws -> [FriendActivity] {
+        let friends = try await fetchFriends(userId: userId)
+        guard !friends.isEmpty else { return [] }
+
+        let friendIds = Array(friends.prefix(30).map(\.id))
+        let friendMap = Dictionary(uniqueKeysWithValues: friends.map { ($0.id, $0) })
+
+        let snapshot = try await db.collection("reviews")
+            .whereField("userId", in: friendIds)
+            .order(by: "updatedAt", descending: true)
+            .limit(to: limit)
+            .getDocuments()
+
+        return snapshot.documents.compactMap { doc in
+            let data = doc.data()
+            guard let friendId = data["userId"] as? String,
+                  let trackId = data["trackId"] as? String,
+                  let trackName = data["trackName"] as? String,
+                  let rating = data["rating"] as? Double,
+                  let friend = friendMap[friendId] else { return nil }
+            let artistName = data["artistName"] as? String ?? "Unknown Artist"
+            let albumName = data["albumName"] as? String ?? ""
+            let imageUrl = (data["albumImageUrl"] as? String).flatMap { URL(string: $0) }
+            let largeImageUrl = (data["albumLargeImageUrl"] as? String).flatMap { URL(string: $0) }
+            let ratedAt = (data["updatedAt"] as? Timestamp)?.dateValue() ?? Date.distantPast
+            return FriendActivity(
+                id: doc.documentID,
+                friendId: friendId,
+                displayName: friend.displayName,
+                profileImageUrl: friend.profileImageUrl,
+                trackId: trackId,
+                trackName: trackName,
+                artistName: artistName,
+                albumName: albumName,
+                albumImageUrl: imageUrl,
+                albumLargeImageUrl: largeImageUrl,
+                rating: rating,
+                ratedAt: ratedAt
+            )
+        }
     }
 
     func fetchReviews(userId: String) async throws -> (songs: [RatedSong], albums: [RatedAlbum]) {

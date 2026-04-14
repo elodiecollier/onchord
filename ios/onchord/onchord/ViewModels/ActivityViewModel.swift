@@ -14,6 +14,7 @@ final class ActivityViewModel {
     var currentTrackId: String? = nil
     var rating: Double = 0
     private(set) var isLoading = true
+    private(set) var friendActivity: [FriendActivity] = []
 
     var isDone: Bool { !isLoading && unratedTracks.isEmpty }
 
@@ -22,8 +23,15 @@ final class ActivityViewModel {
         string: "https://us-east1-onchord-ec86c.cloudfunctions.net/recentlyPlayed"
     )!
 
-    func load() async {
-        await MainActor.run { isLoading = true }
+    func load(isRefresh: Bool = false) async {
+        await MainActor.run { if !isRefresh { isLoading = true } }
+        async let tracksLoad: Void = loadUnratedTracks()
+        async let activityLoad: Void = loadFriendActivity()
+        await tracksLoad
+        await activityLoad
+    }
+
+    private func loadUnratedTracks() async {
         do {
             guard let user = Auth.auth().currentUser else {
                 await MainActor.run { isLoading = false }
@@ -65,6 +73,12 @@ final class ActivityViewModel {
         } catch {
             await MainActor.run { isLoading = false }
         }
+    }
+
+    private func loadFriendActivity() async {
+        guard let uid = Auth.auth().currentUser?.uid else { return }
+        let activity = (try? await firestoreService.fetchFriendActivity(userId: uid)) ?? []
+        await MainActor.run { friendActivity = activity }
     }
 
     // Saves the rating for the given track (if one was set) and removes it from
