@@ -9,5 +9,5 @@ import Foundation
 
 enum SearchMode: String, CaseIterable {
     case music = "Music"
-    case people = "People"
+    case people = "Users"
 }
