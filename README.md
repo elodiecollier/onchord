@@ -4,6 +4,26 @@ A music social platform for iOS that integrates with Spotify. Users can search f
 
 ---
 
+## Why Onchord?
+
+My best friend and I adore our logging and rating apps. Personally, I am consistently updating my Beli with the restaurants I've tried, GoodReads with the books I've finished, and Letterboxd for the movies I've watched. The only app missing was one for rating songs, albums, and artists we listen to. My best friend gave me the idea to build an app to solve this issue, and with the availability of Spotify's API to individual developers, I knew I could do it. Onchord was built for my close friends and me to put our possibly-problematic opinions of music "on the record" and to satisfy the hole we both felt in our logging needs.
+
+---
+
+## Demo & Screenshots
+
+📱 **[Watch the demo on YouTube](https://youtu.be/tblJcXCZfr0?si=r-mOjYSOoaSuZ3NV)**
+
+<p float="left">
+  <img src="https://elodiecollier.github.io/assets/screenshots/rateRecentListens.png" width="18%" />
+  <img src="https://elodiecollier.github.io/assets/screenshots/rateSong.png" width="18%" />
+  <img src="https://elodiecollier.github.io/assets/screenshots/friendActivity.png" width="18%" />
+  <img src="https://elodiecollier.github.io/assets/screenshots/searchResults.png" width="18%" />
+  <img src="https://elodiecollier.github.io/assets/screenshots/myProfile.png" width="18%" />
+</p>
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
