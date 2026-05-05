@@ -27,6 +27,8 @@ firebase/functions/.env
 # --------------------
 .env
 .env.*
+GoogleService-Info.plist
+ios/onchord/onchord/Secrets.swift
 
 # JetBrains IDEs
 .idea/

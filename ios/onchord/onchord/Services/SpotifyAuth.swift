@@ -16,7 +16,7 @@ final class SpotifyAuth: NSObject, ASWebAuthenticationPresentationContextProvidi
     private var session: ASWebAuthenticationSession?
     private var codeVerifier: String?
 
-    private let clientId = "0d3ea70d44e3453fbf2ca7a5f94b1c0c"
+    private let clientId = Secrets.clientId
     private let redirectUri = "onchord://spotify-auth"
 
     func startLogin(
