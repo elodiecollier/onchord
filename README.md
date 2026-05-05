@@ -12,8 +12,6 @@ My best friend and I adore our logging and rating apps. Personally, I am consist
 
 ## Demo & Screenshots
 
-📱 **[Watch the demo on YouTube](https://youtu.be/tblJcXCZfr0?si=r-mOjYSOoaSuZ3NV)**
-
 <p float="left">
   <img src="https://elodiecollier.github.io/assets/screenshots/rateRecentListens.png" width="18%" />
   <img src="https://elodiecollier.github.io/assets/screenshots/rateSong.png" width="18%" />
