@@ -91,7 +91,7 @@ Located in `firebase/functions/package.json`.
 ## Prerequisites
 
 ### macOS / Xcode
-- macOS with **Xcode 26.2** or later
+- macOS with **Xcode 16+** or later
 - Swift 5.0+
 - An Apple Developer account (for device builds / TestFlight)
 
